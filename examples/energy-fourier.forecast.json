@@ -1,0 +1,23 @@
+{
+  "name": "Hourly Electricity Consumption (Weekend Pattern)",
+  "description": "Demonstrates Fourier terms for capturing daily and weekly seasonality simultaneously. Note: Weekends show ~15% lower consumption.",
+  "data": "energy-fourier-hourly.csv",
+  "timeColumn": "timestamp",
+  "valueColumn": "value",
+  "unit": "kWh",
+  "seasonLength": 24,
+  "horizon": 48,
+  "interval": 90,
+  "testSize": 168,
+  "damped": false,
+  "seasonality": "additive",
+  "features": {
+    "type": "fourier",
+    "manual": true,
+    "seasonLengths": [24, 168],
+    "harmonics": [3, 2]
+  },
+  "method": "glm",
+  "createdWith": "forecastlab init --features '{\"fourier\":{\"seasonLengths\":[24,168],\"harmonics\":[3,2]}}'",
+  "requiresVersion": "0.1.0"
+}

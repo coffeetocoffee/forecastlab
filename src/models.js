@@ -12,11 +12,16 @@
 // 2. Theta Method - Competition-winning method with standard/damped variants
 // 3. Croston's Method - For intermittent demand handling zeros/sparcity
 // 4. Box-Cox Transform - Handle multiplicative seasonality via transformation
+//
+// Phase 1 Features:
+// 5. Exogenous Regressors & Fourier Terms - GLM-based forecasting with external features
+//    (Still classical statistics, NOT machine learning)
 
 import { stlDecompose, stlForecast } from './methods/stl.js';
 import { thetaMethod } from './methods/theta.js';
 import { crostonMethod } from './methods/croston.js';
 import { transformFitBackTransform, findOptimalLambda } from './methods/boxcox.js';
+import { fourierFeatures, fourierForecast, validateFourierFeatures } from './utils/fourier.js';
 
 export const INTERVAL_Z = { 80: 1.2816, 90: 1.6449, 95: 1.96 };
 
@@ -84,6 +89,14 @@ export const METHODS = {
     math: 'y(λ) = (y^λ-1)/λ for λ≠0, or ln(y) for λ=0',
     minPoints: 10,
   },
+  // Phase 1: Exogenous Regression with Fourier Terms
+  glm: {
+    title: 'GLM with Exogenous Features',
+    summary: 'Linear regression with user-specified features (Fourier terms, dummies, external regressors). Most flexible classical approach.',
+    math: 'y(t) = β₀ + β₁·X₁(t) + β₂·X₂(t) + ... + ε(t)',
+    minPoints: 10,
+    requiresFeatures: true,
+  },
 };
 
 export const METHOD_IDS = Object.keys(METHODS);
@@ -115,6 +128,8 @@ export function minPointsFor(methodId, seasonLength) {
     case 'theta': return 3;
     case 'croston': return 4;
     case 'boxcox': return 10;
+    // Phase 1: GLM with features needs at least as many observations as parameters
+    case 'glm': return 10; // Minimum reasonable sample size
     default: throw new Error(`Unknown method "${methodId}". Known: ${METHOD_IDS.join(', ')}`);
   }
 }
@@ -126,7 +141,7 @@ export function applicableMethods(count, seasonLength) {
   });
 }
 
-function checkFitInput(values, methodId, { horizon, seasonLength, interval, damped, seasonality, lambda }) {
+function checkFitInput(values, methodId, { horizon, seasonLength, interval, damped, seasonality, lambda, features }) {
   if (!Array.isArray(values) || values.length === 0) throw new Error('No data to forecast');
   if (!METHODS[methodId]) throw new Error(`Unknown method "${methodId}". Known: ${METHOD_IDS.join(', ')}`);
   if (!Number.isInteger(horizon) || horizon < 1) throw new Error('--horizon must be a positive integer');
@@ -152,6 +167,17 @@ function checkFitInput(values, methodId, { horizon, seasonLength, interval, damp
     const minVal = values.reduce((m, v) => Math.min(m, v), Infinity);
     if (minVal <= 0 && lambda !== 0) {
       throw new Error(`Box-Cox with λ=${lambda} requires strictly positive values; minimum is ${minVal}. Use λ=0 (log transform) only with positive data.`);
+    }
+  }
+  
+  // GLM-specific validation: requires features
+  if (methodId === 'glm') {
+    if (!features || !features.matrix || !Array.isArray(features.matrix) || features.matrix.length === 0) {
+      throw new Error('GLM method requires features matrix. Use fourierFeatures() or similar to generate features.');
+    }
+    const validation = validateFourierFeatures(features);
+    if (!validation.valid) {
+      throw new Error(`Invalid features for GLM: ${validation.errors.join(', ')}`);
     }
   }
   
@@ -469,8 +495,8 @@ function fitHwMultiplicative(values, m, damped) {
  *           damped, seasonality, intervalMode }.
  */
 export function fit(values, methodId, options = {}) {
-  const { horizon = 12, seasonLength = null, interval = 80, damped = false, seasonality = 'additive' } = options;
-  checkFitInput(values, methodId, { horizon, seasonLength, interval, damped, seasonality });
+  const { horizon = 12, seasonLength = null, interval = 80, damped = false, seasonality = 'additive', lambda, features = null } = options;
+  checkFitInput(values, methodId, { horizon, seasonLength, interval, damped, seasonality, lambda, features });
   const n = values.length;
   const T = n - 1;
 
@@ -564,6 +590,17 @@ export function fit(values, methodId, options = {}) {
         transform: boxcoxResult.transform,
       };
       break;
+      
+    // Phase 1: GLM with exogenous features
+    case 'glm':
+      if (!options.features || !options.features.matrix) {
+        throw new Error('GLM method requires --features option with Fourier/exogenous features');
+      }
+      fitted = fitGLMForecast(values, options.features, horizon, {
+        interval,
+        featureNames: options.featureNames || null,
+      });
+      break;
     default: throw new Error(`Unknown method "${methodId}"`);
   }
 
@@ -627,6 +664,202 @@ export function fit(values, methodId, options = {}) {
     seasonality: effectiveSeasonality,
     intervalMode: useMult ? 'multiplicative' : 'additive',
     ...bands,
+  };
+}
+
+// ===========================================================================
+// Phase 1: GLM (Generalized Linear Model) with Exogenous Features
+// ===========================================================================
+
+/**
+ * Ordinary Least Squares regression for forecasting with exogenous features.
+ * Uses closed-form solution: β = (X'X)^(-1) X'y
+ */
+function fitGLM(featuresMatrix, values, options = {}) {
+  const n = values.length;
+  const p = featuresMatrix[0].length + 1; // +1 for intercept
+  
+  // Build design matrix X with intercept column
+  const X = new Array(n);
+  for (let i = 0; i < n; i++) {
+    X[i] = new Float64Array(p);
+    X[i][0] = 1; // intercept
+    for (let j = 0; j < featuresMatrix[i].length; j++) {
+      X[i][j + 1] = featuresMatrix[i][j];
+    }
+  }
+  
+  // Compute X'X (p × p matrix)
+  const XtX = new Array(p).fill(0).map(() => new Array(p).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let r = 0; r < p; r++) {
+      for (let c = 0; c < p; c++) {
+        XtX[r][c] += X[i][r] * X[i][c];
+      }
+    }
+  }
+  
+  // Compute X'y (p-vector)
+  const Xty = new Array(p).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let r = 0; r < p; r++) {
+      Xty[r] += X[i][r] * values[i];
+    }
+  }
+  
+  // Solve (X'X)β = X'y using Cholesky decomposition or Gaussian elimination
+  const beta = solveNormalEquations(XtX, Xty);
+  
+  if (!beta) {
+    throw new Error('GLM: Singular design matrix - features may be collinear');
+  }
+  
+  // Compute fitted values and residuals
+  const residuals = [];
+  let sse = 0;
+  for (let i = 0; i < n; i++) {
+    const pred = beta.reduce((sum, b, j) => sum + b * X[i][j], 0);
+    residuals.push(values[i] - pred);
+    sse += residuals[residuals.length - 1] ** 2;
+  }
+  
+  // Estimate error variance (unbiased)
+  const sigma2 = sse / Math.max(n - p, 1);
+  
+  return {
+    beta,
+    residuals,
+    sigma2,
+    nParams: p,
+    featureNames: options.featureNames || null,
+  };
+}
+
+/**
+ * Solve normal equations (X'X)β = X'y using Cholesky decomposition.
+ * Returns null if matrix is singular.
+ */
+function solveNormalEquations(A, b) {
+  const n = A.length;
+  
+  // Check if symmetric positive definite, compute Cholesky
+  const L = new Array(n).fill(0).map(() => new Array(n).fill(0));
+  
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = A[i][j];
+      for (let k = 0; k < j; k++) {
+        sum -= L[i][k] * L[j][k];
+      }
+      
+      if (i === j) {
+        if (sum <= 1e-12) return null; // Singular or nearly singular
+        L[i][j] = Math.sqrt(sum);
+      } else {
+        L[i][j] = sum / L[j][j];
+      }
+    }
+  }
+  
+  // Forward substitution: Ly = b
+  const y = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = b[i];
+    for (let j = 0; j < i; j++) {
+      sum -= L[i][j] * y[j];
+    }
+    y[i] = sum / L[i][i];
+  }
+  
+  // Backward substitution: L'β = y
+  const beta = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = y[i];
+    for (let j = i + 1; j < n; j++) {
+      sum -= L[j][i] * beta[j];
+    }
+    beta[i] = sum / L[i][i];
+  }
+  
+  return beta;
+}
+
+/**
+ * Fit GLM model with Fourier/exogenous features and forecast horizon steps ahead.
+ * @param {Array<number>} values - Historical values
+ * @param {Object} features - Feature matrix info
+ * @param {number} horizon - Forecast horizon
+ * @param {Object} options - Additional options (interval, etc.)
+ * @returns {Object} Forecast result with intervals
+ */
+export function fitGLMForecast(values, features, horizon, options = {}) {
+  const { interval = 80, featureNames = null } = options;
+  
+  const n = values.length;
+  if (n < 10) throw new Error('GLM requires at least 10 observations');
+  
+  // Validate features
+  const validation = validateFourierFeatures(features);
+  if (!validation.valid) {
+    throw new Error(`Invalid features: ${validation.errors.join(', ')}`);
+  }
+  
+  // Fit model
+  const fitted = fitGLM(features.matrix, values, { featureNames });
+  
+  // Generate future features
+  const futureFeatures = fourierForecast(
+    { t: n - 1, n },
+    features.seasonLengths,
+    horizon,
+    { K: features.harmonics || 1 }
+  );
+  
+  // Compute forecasts
+  const points = [];
+  const lower = [];
+  const upper = [];
+  const z = INTERVAL_Z[interval];
+  
+  for (let h = 1; h <= horizon; h++) {
+    const x = new Float64Array(fitted.beta.length);
+    x[0] = 1; // intercept
+    for (let j = 0; j < futureFeatures.matrix[h - 1].length; j++) {
+      x[j + 1] = futureFeatures.matrix[h - 1][j];
+    }
+    
+    const point = fitted.beta.reduce((sum, b, i) => sum + b * x[i], 0);
+    points.push(point);
+    
+    // Prediction interval widens with horizon due to uncertainty in both mean and individual errors
+    const se = z * Math.sqrt(fitted.sigma2 * (1 + h * (1 / n)));
+    lower.push(point - se);
+    upper.push(point + se);
+  }
+  
+  // One-step residuals for RMSE-like metric
+  const oneStepErrors = fitted.residuals;
+  const sigma = Math.sqrt(fitted.sigma2);
+  
+  return {
+    method: 'glm',
+    title: 'GLM with Fourier Features',
+    horizon,
+    interval,
+    z,
+    sigma,
+    params: {
+      coefficients: fitted.beta,
+      featureCount: fitted.beta.length - 1, // exclude intercept
+      seasonLengths: features.seasonLengths,
+      harmonics: features.harmonics || 1,
+    },
+    point: points,
+    lower,
+    upper,
+    summary: `Fitted on ${n} points with ${fitted.beta.length - 1} features`,
+    math: 'y(t) = β₀ + Σ βᵢ·Xᵢ(t)',
+    residualStdError: sigma,
   };
 }
 

@@ -26,6 +26,8 @@ import {
   writeProjectFile,
   resolveInput,
   versionSatisfies,
+  generateFeatures,
+  batchForecast,
 } from './index.js';
 import { createServer, openBrowser } from './serve.js';
 
@@ -37,12 +39,14 @@ const EXAMPLES = {
   energy: { file: 'energy-hourly.csv', project: 'energy.forecast.json', title: 'Hourly building electricity use (kWh)' },
   river: { file: 'river-daily.csv', project: 'river.forecast.json', title: 'Daily river level (m)' },
   temp: { file: 'temp-daily.csv', project: 'temp.forecast.json', title: 'Daily mean temperature (C)' },
+  'energy-fourier': { file: 'energy-fourier-hourly.csv', project: 'energy-fourier.forecast.json', title: 'Hourly electricity with Fourier features' },
 };
 
 const VALUE_OPTS = new Set([
   'data', 'project', 'time', 'value', 'name', 'unit', 'season', 'horizon',
   'interval', 'method', 'methods', 'test-size', 'json', 'html', 'csv', 'md',
   'out', 'example', 'agg', 'step', 'seasonality', 'port', 'host', 'report',
+  'features',
 ]);
 const BOOL_OPTS = new Set(['help', 'version', 'resample', 'damped', 'open']);
 
@@ -90,6 +94,7 @@ Commands:
   report     Full pipeline: backtest + forecast + HTML/JSON report
   reproduce  Re-run analysis from a report and validate reproducibility
   diff       Compare two reports side by side
+  batch      Process multiple series at once (high-volume forecasting)
   serve      Local browser workbench over the same engine (live settings)
   methods    Explain every forecasting method in plain language
   demo       Copy a built-in example dataset into a folder
@@ -101,17 +106,20 @@ Common options:
   --time <col>        Time column name (auto-detected if omitted)
   --value <col>       Value column name (auto-detected if omitted)
   --season <n>        Season length in steps, e.g. 24 for hourly data with a daily cycle
-  --horizon <n>       Steps to forecast (default 24)
-  --interval <n>      Prediction interval: 80, 90 or 95 (default 80)
-  --method <id>       naive | snaive | mean | drift | linear | holt | hw | auto (default auto)
-  --methods <list>    Comma-separated subset used by compare/report
+   --horizon <n>       Steps to forecast (default 24)
+   --interval <n>      Prediction interval: 80, 90 or 95 (default 80)
+   --method <id>       Method to use: naive | snaive | mean | drift | linear | holt | hw | stl | theta | croston | boxcox | glm | auto (default auto)
+   --methods <list>    Comma-separated subset used by compare/report
   --test-size <n>     Held-out tail for backtesting (default: ~20% of data, max 365)
   --resample          Project onto a fixed time grid first (fixes irregular timestamps)
   --agg <id>          Resample aggregation: mean | sum | first | last | min | max (default mean)
   --step <ms>         Grid step for --resample (default: detected dominant spacing)
-  --damped            Shrink the trend with horizon (holt/hw): safer long-horizon forecasts
-  --seasonality <id>  hw seasonality: additive | multiplicative (default additive)
-  --json <path>       Also write machine-readable JSON to a file
+   --damped            Shrink the trend with horizon (holt/hw): safer long-horizon forecasts
+   --seasonality <id>  hw seasonality: additive | multiplicative (default additive)
+   --features <json>   Exogenous features configuration in JSON format (e.g., '{"fourier":{"seasonLengths":[24,168],"harmonics":[2]}}')
+   --batch <dir>       Process all CSV files in directory (requires --methods and optional --fourier-config)
+   --fourier-config <json>  Fourier config for batch mode
+   --json <path>       Also write machine-readable JSON to a file
   --csv <path>        Also write the forecast table as CSV (full precision)
   --html <path>       (report) HTML output path (default forecastlab-report.html)
   --md <path>         (report) Markdown report variant (plain text, no chart)
@@ -152,6 +160,17 @@ function cmdInit(opts) {
   const dataPath = resolve(process.cwd(), opts.data);
   const { text } = loadCsvFile(dataPath);
   const parsed = parseCsv(text, { timeColumn: opts.time, valueColumn: opts.value });
+  
+  // Parse features if provided
+  let featureConfig = null;
+  if (opts.features) {
+    try {
+      featureConfig = JSON.parse(opts.features);
+    } catch (e) {
+      throw new Error(`Invalid --features JSON: ${e.message}`);
+    }
+  }
+  
   const project = {
     ...defaultProject(opts.name ?? basename(dataPath, '.csv'), basename(dataPath)),
     data: basename(dataPath),
@@ -166,6 +185,8 @@ function cmdInit(opts) {
     ...(opts.step ? { step: Number(opts.step) } : {}),
     ...(opts.damped ? { damped: true } : {}),
     ...(opts.seasonality ? { seasonality: opts.seasonality } : {}),
+    ...(featureConfig ? { features: featureConfig } : {}),
+    ...(opts.method ? { method: opts.method } : {}),
   };
   const out = resolve(process.cwd(), opts.out ?? 'forecastlab.json');
   writeProjectFile(out, project);
@@ -200,6 +221,10 @@ function cmdCheck(opts) {
 
 function runBacktest(input, opts) {
   const testSize = input.config.testSize ?? undefined;
+  
+  // Prepare features for GLM if needed
+  const featuresConfig = input.config.features ? generateFeatures(input) : null;
+  
   return backtest(input.values, {
     seasonLength: input.config.seasonLength,
     interval: input.config.interval,
@@ -207,6 +232,7 @@ function runBacktest(input, opts) {
     methods: input.config.methods,
     damped: input.config.damped,
     seasonality: input.config.seasonality,
+    features: featuresConfig,
   });
 }
 
@@ -239,6 +265,10 @@ function pickMethod(input, opts) {
 
 function cmdForecast(opts) {
   const input = resolveInput(opts);
+  
+  // Generate features if configured
+  const featuresConfig = input.config.features ? generateFeatures(input) : null;
+  
   const { methodId } = pickMethod(input, opts);
   const f = fit(input.values, methodId, {
     horizon: input.config.horizon,
@@ -246,6 +276,7 @@ function cmdForecast(opts) {
     interval: input.config.interval,
     damped: input.config.damped,
     seasonality: input.config.seasonality,
+    features: featuresConfig,
   });
   const times = futureTimes(input.parsed.points, input.validation.stepMs, f.horizon);
   console.log(`${f.title}: ${f.horizon} step(s) ahead, ${f.interval}% intervals (sigma ${fmtNum(f.sigma)}):`);
@@ -280,6 +311,10 @@ function cmdForecast(opts) {
 
 function cmdReport(opts) {
   const input = resolveInput(opts);
+  
+  // Generate features if configured
+  const featuresConfig = input.config.features ? generateFeatures(input) : null;
+  
   const methods = applicableMethods(input.values.length, input.config.seasonLength);
   const bt = methods.length > 0
     ? backtest(input.values, {
@@ -289,6 +324,7 @@ function cmdReport(opts) {
       methods: input.config.methods ?? methods,
       damped: input.config.damped,
       seasonality: input.config.seasonality,
+      features: featuresConfig,
     })
     : null;
   const wanted = opts.method ?? 'auto';
@@ -299,6 +335,7 @@ function cmdReport(opts) {
     interval: input.config.interval,
     damped: input.config.damped,
     seasonality: input.config.seasonality,
+    features: featuresConfig,
   });
   const times = futureTimes(input.parsed.points, input.validation.stepMs, f.horizon);
   const labels = input.parsed.points.map((p) => shortLabel(p.iso, input.validation.stepMs));
@@ -656,6 +693,74 @@ function cmdDiff(opts) {
   console.log(`  Generated: ${oldReport.generatedAt || 'N/A'} → ${newReport.generatedAt || 'N/A'}`);
 }
 
+/**
+ * Batch processing command: process multiple CSV files at once
+ */
+async function cmdBatch(opts) {
+  if (!opts.batch) throw new Error('batch needs --batch <directory>');
+  
+  const batchDir = resolve(process.cwd(), opts.batch);
+  
+  // Find all CSV files
+  const { readdirSync, statSync } = await import('node:fs');
+  const csvFiles = readdirSync(batchDir)
+    .filter(f => f.endsWith('.csv'))
+    .map(f => join(batchDir, f));
+  
+  if (csvFiles.length === 0) {
+    throw new Error(`No CSV files found in ${batchDir}`);
+  }
+  
+  console.log(`Found ${csvFiles.length} CSV files in ${batchDir}`);
+  
+  // Parse methods
+  const methods = opts.methods
+    ? String(opts.methods).split(',').map(s => s.trim()).filter(Boolean)
+    : ['glm'];
+  
+  // Parse fourier config
+  let fourierConfig = null;
+  if (opts.fourierConfig || opts.fourier) {
+    try {
+      fourierConfig = JSON.parse(opts.fourierConfig || opts.fourier);
+    } catch (e) {
+      throw new Error(`Invalid --fourier-config JSON: ${e.message}`);
+    }
+  }
+  
+  // Run batch processing
+  console.log('\nStarting batch processing...');
+  const result = await batchForecast({
+    seriesFiles: csvFiles,
+    fourierConfig,
+    methods,
+    maxWorkers: 4,
+  });
+  
+  console.log(`\n✅ Batch complete!`);
+  console.log(`Processed: ${result.results.length}/${csvFiles.length}`);
+  if (result.errors.length > 0) {
+    console.log(`Errors: ${result.errors.length}`);
+    for (const err of result.errors.slice(0, 5)) {
+      console.log(`  - ${err.file}: ${err.error}`);
+    }
+  }
+  
+  // Save results to JSON
+  if (opts.json) {
+    writeJson(opts.json, {
+      summary: {
+        totalFiles: csvFiles.length,
+        successful: result.results.length,
+        failed: result.errors.length,
+      },
+      results: result.results,
+      errors: result.errors,
+    });
+    console.log(`Wrote results to ${resolve(opts.json)}`);
+  }
+}
+
 export function main(argv = process.argv.slice(2)) {
   const { command, opts } = parseArgs(argv);
   if (opts.version) {
@@ -674,6 +779,7 @@ export function main(argv = process.argv.slice(2)) {
     case 'report': cmdReport(opts); break;
     case 'reproduce': cmdReproduce(opts); break;
     case 'diff': cmdDiff(opts); break;
+    case 'batch': await cmdBatch(opts); break;
     case 'methods': cmdMethods(); break;
     case 'demo': cmdDemo(opts); break;
     case 'serve': cmdServe(opts); break;

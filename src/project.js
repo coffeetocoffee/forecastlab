@@ -51,6 +51,10 @@ export function defaultProject(name, dataRel) {
     step: null,
     damped: false,
     seasonality: 'additive',
+    // Phase 1: Exogenous features configuration
+    features: null,
+    // Default forecasting method (auto or specific method ID)
+    method: 'auto',
     createdWith: 'forecastlab init',
     requiresVersion: '0.1.0', // Tier-3: Version pinning for reproducibility
   };
@@ -140,6 +144,8 @@ export function resolveInput(opts = {}, currentVersion = '0.1.0') {
   const methods = opts.methods
     ? String(opts.methods).split(',').map((s) => s.trim()).filter(Boolean)
     : null;
+  const features = opts.features ?? proj.features ?? null;
+  const method = opts.method ?? proj.method ?? 'auto';
 
   const config = {
     name: opts.name ?? proj.name ?? basename(dataPath),
@@ -158,6 +164,8 @@ export function resolveInput(opts = {}, currentVersion = '0.1.0') {
     damped,
     seasonality,
     methods,
+    features,
+    method,
   };
   if (horizon < 1) throw new Error('--horizon must be a positive integer');
   if (![80, 90, 95].includes(interval)) throw new Error('--interval must be one of 80, 90, 95');

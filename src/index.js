@@ -18,6 +18,7 @@ export {
   METHOD_IDS,
   INTERVAL_Z,
   fit,
+  fitGLMForecast,
   methodTitle,
   applicableMethods,
   minPointsFor,
@@ -66,3 +67,29 @@ export {
   compareVersions,
   versionSatisfies,
 } from './project.js';
+
+// Phase 1: Feature utilities
+export {
+  fourierTerm,
+  fourierFeatures,
+  fourierForecast,
+  detectSeasonality,
+  autoFourier,
+  validateFourierFeatures,
+} from './utils/fourier.js';
+
+export {
+  parseFeatureConfig,
+  generateFeatures,
+  prepareFutureFeatures,
+  createFourierConfig,
+  dayOfWeekDummies,
+  weekendIndicator,
+} from './utils/features.js';
+
+// Phase 1: Batch processing
+export {
+  batchForecast,
+  chunkedReader,
+  aggregateBatchResults,
+} from './batch.js';

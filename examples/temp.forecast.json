@@ -1,0 +1,12 @@
+{
+  "name": "Daily mean temperature",
+  "description": "Synthetic daily temperature: warming trend plus a weekly oscillation.",
+  "data": "temp-daily.csv",
+  "timeColumn": "timestamp",
+  "valueColumn": "value",
+  "unit": "C",
+  "seasonLength": 7,
+  "horizon": 14,
+  "interval": 80,
+  "testSize": 21
+}

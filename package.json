@@ -17,7 +17,10 @@
     "./multiSeries.js": "./src/multiSeries.js",
     "./uncertainty.js": "./src/uncertainty.js",
     "./counterfactual.js": "./src/counterfactual.js",
-    "./scheduler.js": "./src/scheduler.js"
+    "./scheduler.js": "./src/scheduler.js",
+    "./visualizations": "./src/visualizations/index.js",
+    "./workers": "./src/workers/index.js",
+    "./scenarios": "./src/scenarios-index.js"
   },
   "files": [
     "src",
@@ -38,6 +41,9 @@
   "engines": {
     "node": ">=20"
   },
+  "dependencies": {
+    "d3": "^7.8.0"
+  },
   "keywords": [
     "forecasting",
     "time-series",
@@ -48,7 +54,10 @@
     "factor-models",
     "uncertainty",
     "scenario-planning",
-    "counterfactual"
+    "counterfactual",
+    "monte-carlo",
+    "visualization",
+    "browser-based"
   ],
   "license": "MIT"
 }

@@ -15,26 +15,6 @@ each with a plain-language explanation, its mathematics, and honest prediction
 intervals. Every report records the input file's SHA-256 hash and the exact
 command that produced it, so results are reproducible years later.
 
-## What's New in v3.0 (Phases 1-2 Complete) ✅
-
-The latest release adds **Intelligent Automation** capabilities:
-
-### Phase 1: Professional Foundation ✅
-- Fourier terms & exogenous regressors
-- Multiple seasonality support
-- Batch processing engine
-- Structural break detection
-- Missing value imputation
-
-### Phase 2: Intelligent Automation ✅
-- Auto-Seasonality Detection via ACF/periodogram analysis
-- Method Recommendation Engine with explanations
-- Ensemble Forecasting (performance-weighted averaging)
-- Smart Parameter Tuning via cross-validation
-- Anomaly-Aware Forecasting with robust regression
-
-See `docs/` for more details on the implementation.
-
 ## Requirements
 
 - Node.js 20 or newer. Nothing else.

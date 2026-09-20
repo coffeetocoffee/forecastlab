@@ -1,0 +1,51 @@
+{
+  "name": "@forecastlab/sdk",
+  "version": "3.0.0-alpha",
+  "description": "Plugin SDK for ForecastLab v3.0 - Extend forecasting capabilities with custom models and metrics",
+  "main": "core.mjs",
+  "types": "types.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./core.mjs",
+      "types": "./types.d.ts"
+    },
+    "./models/arima-light": "./models/arima-light.mjs",
+    "./models/prophet-light": "./models/prophet-light.mjs",
+    "./metrics/business": "./metrics/business-metrics.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "core.mjs",
+    "types.d.ts",
+    "models/*.mjs",
+    "metrics/*.mjs"
+  ],
+  "scripts": {
+    "test": "node --test test/*.mjs",
+    "build": "echo 'No build required for ESM'",
+    "publish-beta": "npm publish --tag beta"
+  },
+  "keywords": [
+    "forecasting",
+    "time-series",
+    "plugin",
+    "sdk",
+    "extension",
+    "statistical-models"
+  ],
+  "author": "ForecastLab Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coffeetocoffee/forecastlab.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/coffeetocoffee/forecastlab/issues"
+  },
+  "homepage": "https://github.com/coffeetocoffee/forecastlab#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

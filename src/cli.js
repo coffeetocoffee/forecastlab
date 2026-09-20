@@ -55,6 +55,9 @@ import {
   SlidingWindow 
 } from './scheduler.js';
 
+// Phase 5: Plugin System
+import { registry as pluginRegistry } from '../sdk/core.mjs';
+
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = resolve(HERE, '..', 'examples');
@@ -1012,6 +1015,44 @@ async function cmdUpdate(opts) {
   console.log(`Executed ${execution.executed.length} jobs at ${execution.timestamp}`);
 }
 
+/**
+ * Plugin system commands (Phase 5)
+ */
+async function cmdPlugins(opts) {
+  if (opts.list || opts._ === 'list') {
+    console.log('📦 ForecastLab Plugins\n');
+    
+    const stats = pluginRegistry.getStats();
+    console.log(`Registered: ${stats.models} models, ${stats.metrics} metrics, ${stats.commands} commands`);
+    console.log('');
+    
+    const models = pluginRegistry.listModelsMetadata();
+    if (models.length > 0) {
+      console.log('Available Models:');
+      console.log('─────────────');
+      for (const model of models) {
+        console.log(`  • ${model.id}`);
+        if (model.description) console.log(`    ${model.description}`);
+      }
+    } else {
+      console.log('No custom plugins loaded.');
+      console.log('Use: forecastlab install-plugin <plugin-name>');
+    }
+  } else if (opts.install || opts._ === 'install') {
+    console.log('Plugin installation coming soon...');
+  }
+}
+
+async function cmdInstallPlugin(opts) {
+  if (!opts.plugin && !opts.name) {
+    throw new Error('Usage: forecastlab install-plugin <name> [--from-url]');
+  }
+  
+  const pluginName = opts.plugin || opts.name;
+  console.log(`📥 Installing plugin: ${pluginName}`);
+  console.log('Installation API under development...');
+}
+
 export function main(argv = process.argv.slice(2)) {
   const { command, opts } = parseArgs(argv);
   if (opts.version) {
@@ -1044,6 +1085,10 @@ export function main(argv = process.argv.slice(2)) {
     case 'what-if': await cmdWhatIf(opts); break;
     case 'schedule': await cmdSchedule(opts); break;
     case 'update': await cmdUpdate(opts); break;
+    
+    // Phase 5: Plugin System Commands
+    case 'plugins': await cmdPlugins(opts); break;
+    case 'install-plugin': await cmdInstallPlugin(opts); break;
     
     default: throw new Error(`Unknown command "${command}". Run: forecastlab help`);
   }

@@ -102,3 +102,37 @@ export {
   chunkedReader,
   aggregateBatchResults,
 } from './batch.js';
+
+// ==========================================
+// Phase 4: Advanced Analytics Modules
+// ==========================================
+
+// Multi-Series Modeling (Phase 4A)
+export {
+  HierarchicalReconciler,
+  PanelAnalyzer,
+  VARModel,
+  FactorExtractor,
+} from './multiSeries.js';
+
+// Uncertainty Quantification (Phase 4B)
+export {
+  MonteCarloSimulator,
+  PredictiveDensity,
+  ScenarioTreeBuilder,
+} from './uncertainty.js';
+
+// Counterfactual Analysis (Phase 4C)
+export {
+  CounterfactualEngine,
+  ScenarioGenerator,
+  ParameterSweeper,
+} from './counterfactual.js';
+
+// Real-Time Adaptation (Phase 4D)
+export {
+  UpdateScheduler,
+  EventTriggerSystem,
+  AdaptiveWeighting,
+  SlidingWindow,
+} from './scheduler.js';

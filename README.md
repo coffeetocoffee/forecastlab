@@ -2,7 +2,7 @@
 
 **Classical forecasting without the black-box magic ✨**
 
-![Version](https://img.shields.io/badge/version-4.0.0--beta-blue) ![License](https://img.shields.io/badge/license-MIT-green) [![Discord](https://img.shields.io/discord/placeholder?label=Join%20Community)]()
+![Version](https://img.shields.io/badge/version-4.0.0--beta-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 

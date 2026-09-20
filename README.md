@@ -1,8 +1,8 @@
-# 🔮 ForecastLab v3.0
+# 🔮 ForecastLab v4.0
 
 **Classical forecasting without the black-box magic ✨**
 
-![Version](https://img.shields.io/badge/version-3.0.0--alpha-blue) ![License](https://img.shields.io/badge/license-MIT-green) [![Discord](https://img.shields.io/discord/placeholder?label=Join%20Community)]()
+![Version](https://img.shields.io/badge/version-4.0.0--beta-blue) ![License](https://img.shields.io/badge/license-MIT-green) [![Discord](https://img.shields.io/discord/placeholder?label=Join%20Community)]()
 
 ---
 
@@ -19,10 +19,10 @@ No hidden algorithms. No black boxes. Just honest, explainable classical statist
 
 ## 🎯 What You Get
 
-- ✅ **Zero Dependencies** — Pure Node.js, nothing else
+- ✅ **Minimal Dependencies** — Pure Node.js with optional D3.js for visualizations (CDN, no npm install needed)
 - ✅ **Explainable Models** — Every method comes with plain-language explanations
 - ✅ **Reproducible Reports** — SHA-256 hash + exact command recorded
-- ✅ **Plugin Ecosystem** — Build custom models with our SDK (v3.0!)
+- ✅ **Plugin Ecosystem** — Build custom models with our SDK (v4.0!)
 - ✅ **Local First** — Your data never leaves your machine
 - ✅ **Classic Methods** — Naive, Holt-Winters, STL, Theta, and more
 
@@ -186,7 +186,7 @@ forecastlab/
 │   ├── models/    ← Statistical forecasting methods
 │   ├── methods/   ← Algorithm implementations
 │   └── cli.js     ← Main command interface
-├── sdk/           🧩 Plugin ecosystem (v3.0!)
+├── sdk/           🧩 Plugin ecosystem (v4.0!)
 │   ├── core.mjs   ← Plugin registry
 │   └── models/    ← Example plugins
 ├── examples/      📊 Demo datasets
@@ -199,7 +199,7 @@ forecastlab/
 
 ## 🎁 Early Adopter Perks
 
-Want to be part of v3.0's launch?
+Want to be part of v4.0's launch?
 
 1. ⭐ Star this repo
 2. 📝 Join Discord (link in issues)
@@ -240,4 +240,4 @@ forecastlab demo --example energy
 ---
 
 *Made with ❤️ for transparent, trustworthy forecasting.*  
-*v3.0.0-alpha — Plugin ecosystem now live!* 🚀
+*v4.0.0-beta — Plugin ecosystem now live!* 🚀

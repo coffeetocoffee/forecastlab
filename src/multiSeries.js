@@ -7,9 +7,8 @@
  * @module multiSeries
  */
 
-const { TimeSeries } = require('./series');
-const { fit: singleFit, forecast: singleForecast } = require('./models');
-const { evaluate, calculateMetrics } = require('./evaluate');
+import { fit as singleFit, METHODS } from './models.js';
+
 
 /**
  * Hierarchical Reconciliation Engine
@@ -102,12 +101,14 @@ class HierarchicalReconciler {
 
         for (const [seriesId, timeSeries] of Object.entries(seriesData)) {
             if (this._isBaseLevel(seriesId)) {
-                const ts = new TimeSeries(timeSeries);
-                const model = await singleFit(ts.values, options.method || 'holt');
-                const forecast = singleForecast(model, options.horizon || 10);
+                // Extract values array from time series object
+                const values = Array.isArray(timeSeries) ? timeSeries : timeSeries.values || timeSeries.data;
+                const model = await singleFit(values, options.method || 'holt', {
+                    horizon: options.horizon || 10
+                });
                 
                 forecasts[seriesId] = {
-                    points: forecast.forecasts,
+                    points: model.point,
                     model: model
                 };
             }
@@ -279,9 +280,14 @@ class PanelAnalyzer {
      * Fit model and forecast for single series
      */
     async _fitAndForecast(data, method) {
-        const ts = new TimeSeries(data);
-        const model = await singleFit(ts.values, method);
-        return singleForecast(model, 10);
+        // Handle both array data and objects with .values property
+        const values = Array.isArray(data) ? data : (data.values || data.data);
+        const model = await singleFit(values, method, { horizon: 10 });
+        return {
+            forecasts: model.point,
+            lower: model.lower,
+            upper: model.upper
+        };
     }
 
     /**
@@ -808,7 +814,7 @@ Array.prototype.transpose = function() {
 };
 
 // Export modules
-module.exports = {
+export {
     HierarchicalReconciler,
     PanelAnalyzer,
     VARModel,

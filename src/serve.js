@@ -22,6 +22,9 @@ import {
   describeBacktest,
   describeForecast,
 } from './index.js';
+import { MonteCarloSimulation } from './uncertainty.js';
+import { HierarchicalReconciler } from './multiSeries.js';
+import * as scenarios from './scenarios/index.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -158,6 +161,130 @@ function handleForecast(searchParams, defaults) {
     card: methodCard(methodId, { damped: input.config.damped, seasonality: input.config.seasonality }),
     autoSelected: wanted === 'auto',
     bestMethod: bt ? bt.best : null,
+  };
+}
+
+/** Run Monte Carlo simulation for prediction bands */
+async function handleSimulation(searchParams, defaults) {
+  const opts = toOpts(searchParams, defaults);
+  const input = resolveInput(opts);
+  
+  const numPaths = parseInt(opts.paths || '1000', 10);
+  const horizon = parseInt(opts.horizon || input.config.horizon || 24, 10);
+  const method = opts.method || 'ar1';
+  
+  const bt = runBacktest(input);
+  const methodId = opts.methodChoice || (bt ? bt.best : 'holt');
+  const fitted = fit(input.values, methodId, {
+    horizon: horizon,
+    seasonLength: input.config.seasonLength,
+    interval: input.config.interval,
+    damped: input.config.damped,
+    seasonality: input.config.seasonality,
+  });
+  
+  const volatility = fitted.sigma || 0.3;
+  
+  const mc = new MonteCarloSimulation({
+    method: method,
+    horizon: horizon,
+    numPaths: numPaths,
+    volatility: volatility,
+    drift: 0,
+  });
+  
+  try {
+    const result = await mc.simulate({
+      baseValues: input.values.slice(-fitted.horizon),
+      lastObserved: input.values[input.values.length - 1],
+    });
+    
+    // Compute percentiles
+    const percentiles = { fifty: [], eighty: [], ninetyFive: [] };
+    for (let i = 0; i < horizon; i++) {
+      const pathValues = result.paths.map(p => p[i]);
+      const sorted = [...pathValues].sort((a, b) => a - b);
+      percentiles.fifty.push(sorted[Math.floor(sorted.length * 0.5)]);
+      percentiles.eighty.push(sorted[Math.floor(sorted.length * 0.1)]);
+      percentiles.ninetyFive.push(sorted[Math.floor(sorted.length * 0.025)]);
+    }
+    
+    const times = futureTimes(input.parsed.points, input.validation.stepMs, horizon);
+    
+    return {
+      config: input.config,
+      simulation: { method: method, numPaths, horizon, volatility, paths: result.paths.slice(0, 50) },
+      percentiles,
+      timestamps: times,
+      history: input.values.slice(-Math.min(50, input.values.length)),
+    };
+  } catch (e) {
+    return { error: 'Monte Carlo failed: ' + e.message };
+  }
+}
+
+/** Generate scenarios using scenario templates */
+async function handleScenarios(searchParams, defaults) {
+  const opts = toOpts(searchParams, defaults);
+  const input = resolveInput(opts);
+  
+  const scenarioTypes = opts.types ? opts.types.split(',') : ['promotion', 'price'];
+  const baseline = input.values.slice(-input.config.horizon || 24);
+  const generatedScenarios = {};
+  
+  try {
+    if (scenarioTypes.includes('promotion')) {
+      const promoGen = new scenarios.PromotionLiftScenarios({ defaultLift: 0.25 });
+      const sc = await promoGen.generateScenarios({
+        history: input.values,
+        seasonLength: input.config.seasonLength,
+        periodDays: 30,
+      });
+      generatedScenarios.promotion = sc;
+    }
+  } catch (e) { console.warn('Promo failed:', e.message); }
+  
+  try {
+    if (scenarioTypes.includes('price')) {
+      const priceGen = new scenarios.PriceElasticityScenarios({
+        categories: ['general'],
+        basePrice: 100,
+        elasticityByCategory: { general: -1.2 },
+      });
+      const sc = await priceGen.generateScenarios({ forecast: baseline, elasticity: -1.2, products: {} });
+      generatedScenarios.price = sc;
+    }
+  } catch (e) { console.warn('Price failed:', e.message); }
+  
+  return { config: input.config, baseline, scenarios: generatedScenarios };
+}
+
+/** Hierarchical reconciliation endpoint */
+async function handleHierarchy(searchParams, defaults) {
+  const opts = toOpts(searchParams, defaults);
+  const input = resolveInput(opts);
+  
+  if (!opts.hierarchy) {
+    return { error: 'Hierarchical mode not enabled. Specify hierarchy parameter.', supported: false };
+  }
+  
+  const hierarchyConfig = JSON.parse(decodeURIComponent(opts.hierarchy));
+  const reconciler = new HierarchicalReconciler(hierarchyConfig);
+  const matrix = reconciler.buildAggregationMatrix();
+  
+  const forecasts = {};
+  for (const node of reconciler.hierarchy.nodes) {
+    if (reconciler._isBaseLevel(node.id)) {
+      forecasts[node.id] = { points: Array(opts.horizon || 24).fill(null), lower: [], upper: [] };
+    }
+  }
+  
+  const weights = reconciler.computeWeights(forecasts);
+  
+  return {
+    config: input.config,
+    hierarchy: { levels: reconciler.hierarchy.levels, nodes: reconciler.hierarchy.nodes, edges: reconciler.hierarchy.edges, seriesMap: reconciler.hierarchy.seriesMap },
+    matrix, weights, forecasts,
   };
 }
 
@@ -561,10 +688,8 @@ function makeChartInteractive(container, stepMs, forecastSteps) {
       tooltip.style.display = 'block';
       tooltip.style.left = (e.clientX + 10) + 'px';
       tooltip.style.top = (e.clientY - 10) + 'px';
-      tooltip.innerHTML = `
-        <strong>Time:</strong> ${timeISO ? shortLabel(timeISO, stepMs) : 'n/a'}<br>
-        <strong>Value:</strong> ${num(pointVal)}
-      `;
+       const timeText = timeISO ? shortLabel(timeISO, stepMs) : 'n/a';
+       tooltip.innerHTML = '&lt;strong&gt;Time:&lt;/strong&gt; ' + timeText + '&lt;br&gt;' + '&lt;strong&gt;Value:&lt;/strong&gt; ' + num(pointVal);
     } else {
       tooltip.style.display = 'none';
     }
@@ -600,7 +725,7 @@ function makeChartInteractive(container, stepMs, forecastSteps) {
     checkbox.onchange = () => toggleChartSeries(svg, m.key, checkbox.checked);
     
     const swatch = el('span');
-    swatch.style.cssText = `width:12px;height:12px;border-radius:2px;background:${m.color};`;
+    swatch.style.cssText = 'width:12px;height:12px;border-radius:2px;background:' + m.color;
     
     item.appendChild(swatch);
     item.appendChild(checkbox);
@@ -694,6 +819,10 @@ $('btn-check').onclick = () => action('summary', (d) => renderSummary(d, false))
 $('btn-compare').onclick = () => action('compare', renderCompare);
 $('btn-forecast').onclick = () => action('forecast', renderForecast);
 $('btn-all').onclick = () => runAll(false);
+// Phase 5 Visualizations
+$('btn-simulation').onclick = async () => { try { const u=new URL('api/simulation',location.href);u.searchParams.set('token',BOOT.token);const r=await fetch(u,{headers:{accept:'application/json'}});const d=await r.json();$('card-simulation').hidden=false;const c=$('simulation-viz');c.innerHTML='';if(d.error){c.appendChild(el('p','Error:'+d.error));return} if(!d.simulation){c.appendChild(el('p','No data'));return} c.appendChild(el('p',d.simulation.numPaths+' paths')).style.marginTop='12px'; }; catch(e) { showError(e.message) } };
+
+$('btn-scenarios').onclick = async () => { try { const u=new URL('api/scenarios',location.href);u.searchParams.set('token',BOOT.token);const r=await fetch(u,{headers:{accept:'application/json'}});const d=await r.json();$('card-scenarios').hidden=false;const c=$('scenarios-viz');c.innerHTML='';if(d.error){c.appendChild(el('p','Error:'+d.error));return} const s=d.scenarios||{};if(Object.keys(s).length===0){c.appendChild(el('p','No templates'));}else{Object.entries(s).forEach(([t,n])=>{c.appendChild(el('p',t+':'+(Array.isArray(n)?n.length:'?')))});}}catch(e){showError(e.message)} };
 $('examples').onchange = (e) => {
   const project = e.target.value;
   if (!project) return;
@@ -726,6 +855,7 @@ export function workbenchHtml({ token, defaults }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
 <title>ForecastLab workbench</title>
+<script src="https://d3js.org/d3.v7.min.js"><\/script>
 <style>
 body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1040px;margin:0 auto;padding:24px;color:#111827;background:#f9fafb}
 header{background:#111827;color:#f9fafb;border-radius:12px;padding:24px;margin-bottom:24px}
@@ -819,6 +949,9 @@ footer{color:#6b7280;font-size:13px;text-align:center;padding:16px}
         <button type="button" id="btn-compare">Compare methods</button>
         <button type="button" id="btn-forecast">Forecast</button>
         <button type="button" id="btn-all" class="primary">Run all</button>
+        <hr style="width:100%;border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
+        <button type="button" id="btn-simulation">Monte Carlo Simulation</button>
+        <button type="button" id="btn-scenarios">Scenario Analysis</button>
       </div>
       <div class="examples">
         <span>Load a built-in example:</span>
@@ -830,6 +963,10 @@ footer{color:#6b7280;font-size:13px;text-align:center;padding:16px}
   <section class="card" id="card-compare" hidden><h2>Method comparison (backtest)</h2><div id="compare"></div></section>
   <section class="card" id="card-forecast" hidden><h2>Forecast</h2><div id="forecast"></div></section>
   <section class="card" id="card-method" hidden><h2 id="method-title">Method</h2><div id="method-card"></div></section>
+  
+  <!-- Phase 5 Visualizations -->
+  <section class="card" id="card-simulation" hidden><h2>Monte Carlo Simulation</h2><div id="simulation-viz"></div></section>
+  <section class="card" id="card-scenarios" hidden><h2>Scenario Analysis</h2><div id="scenarios-viz"></div></section>
 </main>
 <footer>Built locally with ForecastLab · the page re-reads your file on every request · nothing is uploaded</footer>
 <script>
@@ -875,6 +1012,9 @@ export function createServer(options = {}) {
       if (name === 'summary') return sendJson(res, 200, handleSummary(url.searchParams, defaults));
       if (name === 'compare') return sendJson(res, 200, handleCompare(url.searchParams, defaults));
       if (name === 'forecast') return sendJson(res, 200, handleForecast(url.searchParams, defaults));
+      if (name === 'simulation') { handleSimulation(url.searchParams, defaults).then(r => sendJson(res, 200, r)).catch(e => sendJson(res, 400, { error: e.message })); return; }
+      if (name === 'scenarios') { handleScenarios(url.searchParams, defaults).then(r => sendJson(res, 200, r)).catch(e => sendJson(res, 400, { error: e.message })); return; }
+      if (name === 'hierarchy') { handleHierarchy(url.searchParams, defaults).then(r => sendJson(res, 200, r)).catch(e => sendJson(res, 400, { error: e.message })); return; }
       return sendJson(res, 404, { error: `Not found: ${path}` });
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
@@ -897,3 +1037,4 @@ export function openBrowser(url) {
     // the printed URL is enough
   }
 }
+

@@ -85,6 +85,15 @@ export {
   createFourierConfig,
   dayOfWeekDummies,
   weekendIndicator,
+  // Phase 2: Auto-features and recommendations
+  autoDetectSeasonality,
+  extractSeriesCharacteristics,
+  recommendForecastingMethods,
+  createEnsembleForecast,
+  autoTuneParameters,
+  detectAnomalies,
+  robustLinearRegression,
+  generateOutlierImpactReport,
 } from './utils/features.js';
 
 // Phase 1: Batch processing

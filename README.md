@@ -219,15 +219,6 @@ MIT — free to use, modify, and distribute. See [LICENSE](LICENSE).
 
 ---
 
-## 🔥 Coming Soon (v3.0+)
-
-- 🗂️ **Model Zoo** - Community-contributed validated models
-- 📊 **Dataset Repository** - Benchmark datasets collection  
-- 🏅️ **Validation Framework** - Quality standards for plugins
-- 🌐 **Plugin Marketplace** - Discover and install extensions
-
----
-
 ## 💬 Final Word
 
 **ForecastLab exists because predicting the future should be:**

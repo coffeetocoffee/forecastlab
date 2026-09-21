@@ -2,3 +2,10 @@ node_modules/
 out/
 *.log
 .DS_Store
+
+# Output of "forecastlab demo" and generated reports
+forecastlab-demo/
+report.html
+forecastlab-report.json
+serve-out.txt
+serve-err.txt

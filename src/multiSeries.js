@@ -456,17 +456,23 @@ class VARModel {
         const nSeries = timeSeriesMatrix.length;
         const nObservations = timeSeriesMatrix[0].length;
 
-        // Build design matrices with lagged features
+        // Build design matrices with lagged features (plus an intercept column)
         const X = this._buildDesignMatrix(timeSeriesMatrix, this.order);
         const Y = this._buildResponseMatrix(timeSeriesMatrix, this.order);
 
-        // OLS estimation: β = (X'X)⁻¹X'Y
-        const XtX = this._matmul(X.transpose(), X);
-        const XtY = this._matmul(X.transpose(), Y);
+        // OLS estimation: β = (X'X)⁻¹X'Y, solved for every equation at once.
+        // A tiny ridge term keeps collinear regressors solvable (they otherwise
+        // make X'X singular) without materially changing well-conditioned fits.
+        const XtX = this._matmul(transposeMatrix(X), X);
+        const XtY = this._matmul(transposeMatrix(X), Y);
+        for (let i = 0; i < XtX.length; i++) XtX[i][i] += Math.max(XtX[i][i] * 1e-8, 1e-12);
         const beta = this._solveLinearSystem(XtX, XtY);
+        if (beta === null) throw new Error('VAR design matrix is singular; series may be perfectly collinear');
 
         this.coefficients = beta;
-        this.residuals = Y.subtract(this._matmul(X, beta));
+        this._history = timeSeriesMatrix;
+        const fitted = this._matmul(X, beta);
+        this.residuals = Y.map((row, i) => row.map((v, j) => v - fitted[i][j]));
 
         return {
             coefficients: this._formatCoefficients(beta, nSeries),
@@ -476,15 +482,15 @@ class VARModel {
     }
 
     /**
-     * Build design matrix with lagged features
+     * Build design matrix with lagged features and an intercept column.
+     * Column layout: [1, series_0 lag_1 ... series_0 lag_order, series_1 lag_1, ...]
      */
     _buildDesignMatrix(data, order) {
         const nSeries = data.length;
-        const nObs = data[0].length - order;
         const X = [];
 
         for (let t = order; t < data[0].length; t++) {
-            const row = [];
+            const row = [1]; // intercept
             // Include all series' lags
             for (let i = 0; i < nSeries; i++) {
                 for (let k = 1; k <= order; k++) {
@@ -539,10 +545,12 @@ class VARModel {
     }
 
     /**
-     * Solve linear system Ax = b using Gaussian elimination
+     * Solve linear system Ax = B for all columns of B using Gaussian elimination.
+     * A is n×n, B is n×m; returns x as an n×m matrix.
      */
     _solveLinearSystem(A, b) {
         const n = A.length;
+        const m = b[0].length;
         const aug = A.map((row, i) => [...row, ...b[i]]);
 
         // Forward elimination
@@ -556,41 +564,48 @@ class VARModel {
             }
             [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]];
 
+            const pivot = aug[col][col];
+            if (Math.abs(pivot) < 1e-12) return null; // Singular design matrix
+
             // Eliminate
             for (let row = col + 1; row < n; row++) {
-                const factor = aug[row][col] / aug[col][col];
-                for (let j = col; j <= n; j++) {
+                const factor = aug[row][col] / pivot;
+                for (let j = col; j < n + m; j++) {
                     aug[row][j] -= factor * aug[col][j];
                 }
             }
         }
 
-        // Back substitution
-        const x = Array(n).fill(0);
+        // Back substitution, for every column of B
+        const x = Array(n).fill(null).map(() => Array(m).fill(0));
         for (let i = n - 1; i >= 0; i--) {
-            x[i] = aug[i][n];
-            for (let j = i + 1; j < n; j++) {
-                x[i] -= aug[i][j] * x[j];
+            for (let c = 0; c < m; c++) {
+                let sum = aug[i][n + c];
+                for (let j = i + 1; j < n; j++) {
+                    sum -= aug[i][j] * x[j][c];
+                }
+                x[i][c] = sum / aug[i][i];
             }
-            x[i] /= aug[i][i];
         }
 
         return x;
     }
 
     /**
-     * Format coefficients with series labels
+     * Format coefficients with series labels.
+     * beta is (1 + nSeries*order) × nSeries: row 0 is the intercept.
      */
     _formatCoefficients(beta, nSeries) {
         const formatted = {};
-        const coeffPerSeries = this.order;
 
         for (let i = 0; i < nSeries; i++) {
-            formatted[`series_${i}`] = {};
+            const eq = { intercept: beta[0][i] };
             for (let j = 0; j < nSeries; j++) {
-                formatted[`series_${i}`][`lag_${this.order}_coeff`] = 
-                    beta[i * nSeries * coeffPerSeries + j * coeffPerSeries];
+                for (let k = 1; k <= this.order; k++) {
+                    eq[`lag_${k}_series_${j}`] = beta[1 + j * this.order + (k - 1)][i];
+                }
             }
+            formatted[`series_${i}`] = eq;
         }
 
         return formatted;
@@ -612,27 +627,39 @@ class VARModel {
     }
 
     /**
-     * Forecast h steps ahead
+     * Forecast h steps ahead by iterating the fitted equations.
+     * this.coefficients is (1 + nSeries*order) × nSeries; row 0 holds intercepts.
      */
     forecast(stepsAhead) {
-        const nSeries = this.coefficients.length;
+        if (!this.coefficients || !this._history) {
+            throw new Error('VAR model must be fit before forecasting');
+        }
+        const nSeries = this._history.length;
+        const order = this.order;
+
+        // state[k - 1] holds the lag-k observation vector (most recent first)
+        let state = [];
+        for (let k = 1; k <= order; k++) {
+            state.push(this._history.map((series) => series[series.length - k]));
+        }
+
         const forecasts = [];
-
-        // Get last observed state
-        let currentState = this._getLastState();
-
-        for (let s = 1; s <= stepsAhead; s++) {
-            const nextStep = this._applyCoefficients(currentState);
-            forecasts.push(nextStep);
-            currentState = this._shiftState(currentState, nextStep);
+        for (let s = 0; s < stepsAhead; s++) {
+            const next = new Array(nSeries).fill(0);
+            for (let i = 0; i < nSeries; i++) {
+                let sum = this.coefficients[0][i]; // intercept
+                for (let j = 0; j < nSeries; j++) {
+                    for (let k = 1; k <= order; k++) {
+                        sum += this.coefficients[1 + j * order + (k - 1)][i] * state[k - 1][j];
+                    }
+                }
+                next[i] = sum;
+            }
+            forecasts.push(next);
+            state = [next, ...state.slice(0, order - 1)];
         }
 
         return forecasts;
-    }
-
-    _getLastState() {
-        // Simplified - would extract from fitted data in production
-        return Array(this.coefficients.length / this.order).fill(0);
     }
 
     _applyCoefficients(state) {
@@ -808,10 +835,10 @@ class FactorExtractor {
     }
 }
 
-// Matrix transpose helper
-Array.prototype.transpose = function() {
-    return this[0].map((_, colIndex) => this.map(row => row[colIndex]));
-};
+// Matrix helpers (module-local: no Array.prototype pollution)
+function transposeMatrix(A) {
+    return A[0].map((_, colIndex) => A.map((row) => row[colIndex]));
+}
 
 // Export modules
 export {

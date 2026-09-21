@@ -22,7 +22,7 @@ import {
   describeBacktest,
   describeForecast,
 } from './index.js';
-import { MonteCarloSimulation } from './uncertainty.js';
+import { MonteCarloSimulator } from './uncertainty.js';
 import { HierarchicalReconciler } from './multiSeries.js';
 import * as scenarios from './scenarios/index.js';
 
@@ -185,7 +185,7 @@ async function handleSimulation(searchParams, defaults) {
   
   const volatility = fitted.sigma || 0.3;
   
-  const mc = new MonteCarloSimulation({
+  const mc = new MonteCarloSimulator({
     method: method,
     horizon: horizon,
     numPaths: numPaths,
@@ -837,6 +837,31 @@ $('project').onchange = () => {
 };
 
 $('serverinfo').textContent = 'Listening on ' + location.host + ' · forecastlab ' + BOOT.version + ' · re-reads your file on every request';
+let liveSource=null;
+$('btn-live').onclick = async () => { try {
+  const st = await (await fetch(new URL('api/stream/status',location.href),{headers:{accept:'application/json'}})).json();
+  $('card-live').hidden=false;
+  const box=$('live-status');
+  if(!st.enabled){ box.textContent = st.hint || 'Streaming disabled.'; return; }
+  box.textContent = 'Live: ' + ((st.series||[]).join(', ')||'no series yet') + ' · mode ' + st.mode;
+  if(liveSource) liveSource.close();
+  const mod = await import(new URL('streaming-chart.js',location.href).href);
+  const chart = new mod.StreamingChart($('live-chart'),{title:'Live forecast'});
+  const hist=[];
+  liveSource = new EventSource(new URL('api/stream/events',location.href).href);
+  liveSource.onmessage = (e) => { try {
+    const ev=JSON.parse(e.data);
+    if(ev.type==='update'&&ev.point){
+      hist.push({t:ev.point.t,v:ev.point.value}); if(hist.length>200)hist.shift();
+      const fc=ev.forecast||[]; const lastT=hist.length?hist[hist.length-1].t:Date.now();
+      const step=hist.length>1?Math.max(1,hist[hist.length-1].t-hist[hist.length-2].t):60000;
+      chart.update({history:hist,forecast:fc,lower:ev.lower||[],upper:ev.upper||[],horizonTimes:fc.map((_,i)=>lastT+(i+1)*step)});
+      box.textContent='Live: '+ev.seriesId+' · '+(ev.method||'?')+' · '+(ev.recomputed?('recomputed ('+ev.reason+')'):'cached')+' · '+((ev.alerts||[]).length)+' alerts';
+    }
+    if(ev.type==='alert'&&ev.alert){ const c=$('live-alerts'); const p=el('p','['+ev.alert.level+'] '+ev.alert.message); p.style.margin='4px 0'; c.prepend(p); while(c.children.length>8)c.lastChild.remove(); }
+  } catch(err){} };
+  liveSource.onerror=()=>{ box.textContent='Live connection lost. Press Live stream to reconnect.'; };
+} catch(e){ showError(e.message) } };
 prefill();
 loadExamples();
 if (BOOT.defaults.data || BOOT.defaults.project) runAll(true);
@@ -952,6 +977,7 @@ footer{color:#6b7280;font-size:13px;text-align:center;padding:16px}
         <hr style="width:100%;border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
         <button type="button" id="btn-simulation">Monte Carlo Simulation</button>
         <button type="button" id="btn-scenarios">Scenario Analysis</button>
+        <button type="button" id="btn-live">Live stream</button>
       </div>
       <div class="examples">
         <span>Load a built-in example:</span>
@@ -967,6 +993,7 @@ footer{color:#6b7280;font-size:13px;text-align:center;padding:16px}
   <!-- Phase 5 Visualizations -->
   <section class="card" id="card-simulation" hidden><h2>Monte Carlo Simulation</h2><div id="simulation-viz"></div></section>
   <section class="card" id="card-scenarios" hidden><h2>Scenario Analysis</h2><div id="scenarios-viz"></div></section>
+  <section class="card" id="card-live" hidden><h2>Live stream</h2><p class="muted" id="live-status">Not connected. Start serve with --feed file:&lt;path&gt; to attach a streaming engine.</p><div class="chart" id="live-chart"></div><div id="live-alerts"></div></section>
 </main>
 <footer>Built locally with ForecastLab · the page re-reads your file on every request · nothing is uploaded</footer>
 <script>
@@ -984,9 +1011,50 @@ ${clientScript()}
  * a web page on another origin cannot drive this server without it.
  * options: { token, defaults }.
  */
+/** Live-update endpoints for the streaming layer (Server-Sent Events). */
+function streamStatus(engine) {
+  if (!engine) return { enabled: false, hint: 'Restart serve with --feed file:<path> to attach a streaming engine.' };
+  return { enabled: true, ...engine.status() };
+}
+
+function streamEvents(req, res, engine) {
+  if (!engine) return sendJson(res, 200, { error: 'No streaming engine attached. Restart serve with --feed file:<path>.' });
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'x-content-type-options': 'nosniff',
+  });
+  const send = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {}
+  };
+  for (const e of engine.history(20)) send(e); // catch the client up first
+  const unsub = engine.hub.subscribe(send);
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {}
+  }, 25000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsub();
+  });
+}
+
+let cachedChartAsset = null;
+function streamingChartAsset() {
+  if (!cachedChartAsset) {
+    cachedChartAsset = readFileSync(join(HERE, 'visualizations', 'streaming-chart.js'), 'utf8');
+  }
+  return cachedChartAsset;
+}
+
 export function createServer(options = {}) {
   const token = options.token ?? randomUUID();
   const defaults = options.defaults ?? {};
+  const streaming = options.streaming ?? null;
   const server = createHttpServer((req, res) => {
     let url;
     try {
@@ -999,9 +1067,14 @@ export function createServer(options = {}) {
       if (path === '/') {
         return send(res, 200, 'text/html; charset=utf-8', workbenchHtml({ token, defaults }));
       }
+      if (path === '/streaming-chart.js') {
+        return send(res, 200, 'application/javascript; charset=utf-8', streamingChartAsset());
+      }
       if (path === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION });
       if (path === '/api/methods') return sendJson(res, 200, { methods: allMethodCards() });
       if (path === '/api/examples') return sendJson(res, 200, { examples: listExamples() });
+      if (path === '/api/stream/status') return sendJson(res, 200, streamStatus(streaming));
+      if (path === '/api/stream/events') return streamEvents(req, res, streaming);
       if (!path.startsWith('/api/')) return sendJson(res, 404, { error: `Not found: ${path}` });
       const name = path.slice('/api/'.length);
       if (PROTECTED.has(name) && url.searchParams.get('token') !== token) {

@@ -1,0 +1,21 @@
+{
+  "name": "energy-hourly",
+  "description": "",
+  "data": "energy-hourly.csv",
+  "timeColumn": "timestamp",
+  "valueColumn": "value",
+  "unit": "kWh",
+  "seasonLength": 24,
+  "horizon": 48,
+  "interval": 80,
+  "testSize": null,
+  "resample": false,
+  "agg": "mean",
+  "step": null,
+  "damped": false,
+  "seasonality": "additive",
+  "features": null,
+  "method": "auto",
+  "createdWith": "forecastlab init",
+  "requiresVersion": "0.1.0"
+}

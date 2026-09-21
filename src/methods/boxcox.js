@@ -7,41 +7,41 @@
  * Box-Cox transformation wrapper
  * Applies Box-Cox transform, fits model, transforms back
  */
-export function transformFitBackTransform(values, lambda, fitFunc, forecastFunc) {
-  // Step 1: Check if all values are positive (required for Box-Cox)
+export function transformFitBackTransform(values, lambda, fitFunc, forecastFunc, shift = 0) {
+  // Step 1: Box-Cox needs strictly positive values; shift up if necessary.
+  // The total shift is carried through and undone on the way back out.
   const minVal = Math.min(...values);
   if (minVal <= 0) {
-    console.warn('Box-Cox requires strictly positive values. Shifting data by', -minVal + 1);
-    const shift = -minVal + 1;
-    const shifted = values.map(v => v + shift);
-    return transformFitBackTransform(shifted, lambda, fitFunc, forecastFunc, shift);
+    const extra = -minVal + 1;
+    console.warn('Box-Cox requires strictly positive values. Shifting data by', extra);
+    return transformFitBackTransform(values.map((v) => v + extra), lambda, fitFunc, forecastFunc, shift + extra);
   }
-  
-  // Step 2: Apply Box-Cox transform
+
+  // Step 2: Apply the Box-Cox transform and fit on the transformed scale.
   const transformed = applyBoxCox(values, lambda);
-  
-  // Step 3: Fit model on transformed data
   const fitted = fitFunc(transformed);
-  
-  // Step 4: Transform forecasts back to original scale
-  const forecast = {
-    point: inverseBoxCox(fitted.point, lambda),
-    lower: inverseBoxCox(fitted.lower, lambda),
-    upper: inverseBoxCox(fitted.upper, lambda),
-  };
-  
+
+  // Step 3: Inverse-transform forecast arrays back to the original scale.
+  const invert = (arr) =>
+    Array.isArray(arr) && arr.length ? inverseBoxCox(arr, lambda).map((v) => v - shift) : arr;
+  const back = {};
+  if (fitted.point !== undefined) back.point = invert(fitted.point);
+  if (fitted.lower !== undefined) back.lower = invert(fitted.lower);
+  if (fitted.upper !== undefined) back.upper = invert(fitted.upper);
+
   return {
     ...fitted,
     transform: {
       type: 'box-cox',
       lambda,
-      shift: 0,
+      shift,
     },
     params: {
       ...fitted.params,
       boxCoxLambda: lambda,
+      boxCoxShift: shift,
     },
-    ...forecast,
+    ...back,
   };
 }
 
@@ -67,7 +67,14 @@ export function inverseBoxCox(values, lambda) {
     return values.map(v => Math.exp(v));
   }
   
-  return values.map(v => Math.pow(v * lambda + 1, 1 / lambda));
+  return values.map(v => {
+    const base = v * lambda + 1;
+    // The inverse is only defined for a positive base. Extrapolated forecasts
+    // can leave that domain (e.g. a negative lambda with a rising trend), so
+    // clamp instead of emitting NaN; forecasts stay finite and non-negative.
+    if (base <= 0) return 0;
+    return Math.pow(base, 1 / lambda);
+  });
 }
 
 /**

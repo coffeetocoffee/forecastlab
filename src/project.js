@@ -1,8 +1,8 @@
 // Reproducible project files: a small JSON sidecar that records exactly
 // which data, columns, and settings produced a forecast.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync, readdirSync } from 'node:fs';
+import { resolve, dirname, basename, join } from 'node:path';
 import { parseCsv, loadCsvFile, validateSeries, resamplePoints, dominantStep } from './series.js';
 
 /** Compare semantic versions: returns -1 (older), 0 (equal), or 1 (newer) */
@@ -109,9 +109,27 @@ export function resolveInput(opts = {}, currentVersion = '0.1.0') {
   let proj = {};
   let baseDir = cwd;
   if (opts.project) {
-    const projectPath = resolve(cwd, opts.project);
+    let projectPath = resolve(cwd, opts.project);
+    // Allow pointing at a directory that holds the project file (e.g. "check .")
+    if (existsSync(projectPath) && statSync(projectPath).isDirectory()) {
+      const found = readdirSync(projectPath).filter((f) => f.endsWith('.forecast.json')).sort();
+      if (found.length === 1) {
+        projectPath = join(projectPath, found[0]);
+      } else {
+        throw new Error(
+          `Directory "${opts.project}" must contain exactly one *.forecast.json file, found ${found.length}.`,
+        );
+      }
+    }
     proj = readProjectFile(projectPath, currentVersion);
     baseDir = dirname(projectPath);
+  } else if (!opts.data) {
+    // No explicit input given: use the working directory's project file if there is exactly one.
+    const found = readdirSync(cwd).filter((f) => f.endsWith('.forecast.json')).sort();
+    if (found.length === 1) {
+      proj = readProjectFile(resolve(cwd, found[0]), currentVersion);
+      baseDir = cwd;
+    }
   }
   const dataRel = opts.data ?? proj.data;
   if (!dataRel) throw new Error('No input data. Use --data <file.csv> or --project <file.json>');

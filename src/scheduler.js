@@ -206,7 +206,7 @@ class EventTriggerSystem {
         if (!metrics.currentRMSE || !metrics.baselineRMSE) return false;
         
         const ratio = metrics.currentRMSE / metrics.baselineRMSE;
-        return ratio > threshold;
+        return ratio >= threshold;
     }
 
     _detectStructuralBreak(metrics) {
@@ -334,14 +334,14 @@ class SlidingWindow {
         }
         
         if (data.length <= windowSize) {
-            return { ...data };
+            return [...data];
         }
-        
-        return {
-            ...data.slice(-windowSize),
-            windowStartIndex: data.length - windowSize,
-            windowEndIndex: data.length
-        };
+
+        // Return a real array, carrying the window bounds as metadata.
+        const window = data.slice(-windowSize);
+        window.windowStartIndex = data.length - windowSize;
+        window.windowEndIndex = data.length;
+        return window;
     }
 
     /**
@@ -388,7 +388,7 @@ class SlidingWindow {
 }
 
 // Export modules
-module.exports = {
+export {
     UpdateScheduler,
     EventTriggerSystem,
     AdaptiveWeighting,

@@ -20,7 +20,7 @@
 import { stlDecompose, stlForecast } from './methods/stl.js';
 import { thetaMethod } from './methods/theta.js';
 import { crostonMethod } from './methods/croston.js';
-import { transformFitBackTransform, findOptimalLambda } from './methods/boxcox.js';
+import { transformFitBackTransform, findOptimalLambda, applyBoxCox, inverseBoxCox } from './methods/boxcox.js';
 import { fourierFeatures, fourierForecast, validateFourierFeatures } from './utils/fourier.js';
 
 export const INTERVAL_Z = { 80: 1.2816, 90: 1.6449, 95: 1.96 };
@@ -556,7 +556,7 @@ export function fit(values, methodId, options = {}) {
       break;
       
     case 'croston':
-      const crostonResult = crostonMethod(values, {});
+      const crostonResult = crostonMethod(values, { horizon });
       fitted = {
         oneStep: null,
         errors: [],
@@ -570,26 +570,33 @@ export function fit(values, methodId, options = {}) {
       };
       break;
       
-    case 'boxcox':
+    case 'boxcox': {
+      // Fit on the transformed series, then map points and intervals back through
+      // the inverse transform (undoing any positivity shift) to the original scale.
       const optimalLambda = findOptimalLambda(values);
-      const boxcoxResult = transformFitBackTransform(
-        values,
-        optimalLambda.lambda,
-        fitHolt,
-        null // Not needed for simple pass-through
-      );
+      const bcShift = optimalLambda.shift;
+      const bcAdjusted = bcShift ? values.map((v) => v + bcShift) : values;
+      const bcLambda = optimalLambda.lambda;
+      const bcTransformed = applyBoxCox(bcAdjusted, bcLambda);
+      const bcInner = fitHolt(bcTransformed);
+      const bcPoints = [];
+      for (let h = 1; h <= horizon; h++) bcPoints.push(bcInner.forecast(h));
+      const bcSigma = rootMeanSquare(bcInner.errors, bcInner.nParams);
+      const bcZ = INTERVAL_Z[interval];
+      const toOriginal = (arr) => inverseBoxCox(arr, bcLambda).map((v) => v - bcShift);
       fitted = {
         oneStep: null,
-        errors: values.map((v, i) => v - boxcoxResult.point?.[i] || v),
-        nParams: 2,
-        params: boxcoxResult.params,
-        point: boxcoxResult.point,
-        lower: boxcoxResult.lower,
-        upper: boxcoxResult.upper,
-        sigma: boxcoxResult.sigma,
-        transform: boxcoxResult.transform,
+        errors: bcInner.errors,
+        nParams: bcInner.nParams + 1,
+        params: { ...bcInner.params, boxCoxLambda: bcLambda, boxCoxShift: bcShift },
+        point: toOriginal(bcPoints),
+        lower: toOriginal(bcPoints.map((p) => p - bcZ * bcSigma)),
+        upper: toOriginal(bcPoints.map((p) => p + bcZ * bcSigma)),
+        sigma: bcSigma,
+        transform: { type: 'box-cox', lambda: bcLambda, shift: bcShift },
       };
       break;
+    }
       
     // Phase 1: GLM with exogenous features
     case 'glm':
@@ -741,19 +748,25 @@ function fitGLM(featuresMatrix, values, options = {}) {
  */
 function solveNormalEquations(A, b) {
   const n = A.length;
-  
+
+  // Tiny ridge term, relative to each column's scale, keeps near-collinear
+  // feature sets solvable instead of degenerating into a singular matrix.
+  const ridge = [];
+  for (let i = 0; i < n; i++) ridge.push(Math.max(A[i][i] * 1e-8, 1e-12));
+  for (let i = 0; i < n; i++) A[i][i] += ridge[i];
+
   // Check if symmetric positive definite, compute Cholesky
   const L = new Array(n).fill(0).map(() => new Array(n).fill(0));
-  
+
   for (let i = 0; i < n; i++) {
     for (let j = 0; j <= i; j++) {
       let sum = A[i][j];
       for (let k = 0; k < j; k++) {
         sum -= L[i][k] * L[j][k];
       }
-      
+
       if (i === j) {
-        if (sum <= 1e-12) return null; // Singular or nearly singular
+        if (sum <= 0) return null; // Singular even with the ridge term
         L[i][j] = Math.sqrt(sum);
       } else {
         L[i][j] = sum / L[j][j];

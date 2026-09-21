@@ -25,24 +25,18 @@ test('PluginRegistry throws error on invalid model', () => {
   }, Error);
 });
 
-test('ARIMALight model fits data successfully', (done) => {
+test('ARIMALight model fits data successfully', () => {
   const testData = [100, 105, 110, 108, 112, 115, 120, 118, 122, 125];
   const model = new ARIMALight();
-  
-  try {
-    model.fit(testData, { p: 1 });
-    
-    const forecasts = model.forecast(3);
-    
-    assert.strictEqual(forecasts.length, 3);
-    assert.ok(typeof forecasts[0].value === 'number');
-    assert.ok(typeof forecasts[0].lower === 'number');
-    assert.ok(typeof forecasts[0].upper === 'number');
-    
-    done();
-  } catch (error) {
-    done(error);
-  }
+
+  model.fit(testData, { p: 1 });
+
+  const forecasts = model.forecast(3);
+
+  assert.strictEqual(forecasts.length, 3);
+  assert.ok(typeof forecasts[0].value === 'number');
+  assert.ok(typeof forecasts[0].lower === 'number');
+  assert.ok(typeof forecasts[0].upper === 'number');
 });
 
 test('ARIMALight provides explanation', () => {

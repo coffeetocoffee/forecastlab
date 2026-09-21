@@ -72,29 +72,32 @@ export function fourierFeatures(values, m, options = {}) {
 export function fourierForecast(lastObs, m, horizon, options = {}) {
   const { K = 1 } = options;
   const startT = lastObs.t + 1;
-  
+
   const seasonLengths = Array.isArray(m) ? m : [m];
-  const totalHarmonics = seasonLengths.reduce((sum, sl) => sum + K, 0);
-  const numTerms = totalHarmonics * 2;
-  
+  // K may be a single value or one entry per season length (as produced by autoFourier)
+  const harmonics = Array.isArray(K)
+    ? K
+    : new Array(seasonLengths.length).fill(K);
+  const numTerms = harmonics.reduce((sum, k) => sum + 2 * (k ?? 1), 0);
+
   const matrix = new Array(horizon);
   for (let h = 1; h <= horizon; h++) {
     const t = startT + h - 1; // forecast time indices
     matrix[h - 1] = new Float64Array(numTerms);
     let idx = 0;
-    for (const sl of seasonLengths) {
-      const terms = fourierTerm(t, sl, K);
+    for (let s = 0; s < seasonLengths.length; s++) {
+      const terms = fourierTerm(t, seasonLengths[s], harmonics[s] ?? 1);
       for (let j = 0; j < terms.length; j++) {
         matrix[h - 1][idx + j] = terms[j];
       }
       idx += terms.length;
     }
   }
-  
+
   return {
     matrix,
     seasonLengths,
-    harmonics: K,
+    harmonics,
     numTerms,
     startT,
   };
@@ -205,9 +208,11 @@ export function detectSeasonality(values, options = {}) {
  * @returns {Object} { matrix, seasonLengths, harmonics, detection }
  */
 export function autoFourier(features, options = {}) {
-  const { maxLag = 500, K = 2, minHarmonics = 1 } = options;
-  
-  // Detect seasonality
+  const { maxLag = null, K = 2, minHarmonics = 1 } = options;
+
+  // Detect seasonality.
+  // maxLag defaults to ~n/2 inside detectSeasonality: a period longer than half
+  // the sample cannot be estimated and makes the design matrix near-singular.
   const detection = detectSeasonality(features.values, { maxLag });
   
   if (!detection.detected) {
@@ -223,9 +228,17 @@ export function autoFourier(features, options = {}) {
   }
   
   // Use detected seasonality with appropriate harmonics
-  const seasonLengths = detection.lags.map(p => p.lag);
+  const allDetectedLags = detection.lags.map(p => p.lag);
+  // A lag that is a small integer multiple of a shorter detected lag is already
+  // spanned by that lag's harmonics; keeping both makes the design matrix singular.
+  const seasonLengths = [];
+  for (const sl of [...allDetectedLags].sort((a, b) => a - b)) {
+    const redundant = seasonLengths.some((s) => sl % s === 0 && sl / s <= K);
+    if (!redundant) seasonLengths.push(sl);
+  }
+  if (seasonLengths.length === 0) seasonLengths.push(allDetectedLags[0]);
   // Add default K if not specified by user
-  const harmonics = detection.lags.map(() => K);
+  const harmonics = seasonLengths.map(() => K);
   
   // Build combined Fourier features
   const n = features.values.length;
@@ -250,6 +263,7 @@ export function autoFourier(features, options = {}) {
     harmonics,
     numTerms: totalTerms,
     detection,
+    allDetectedLags,
     usesFourier: true,
   };
 }
@@ -277,8 +291,12 @@ export function validateFourierFeatures(features) {
     return { valid: false, errors };
   }
   
+  // harmonics may be a single value or one entry per detected season length
+  const harmonics = Array.isArray(features.harmonics)
+    ? features.harmonics
+    : new Array(features.seasonLengths.length).fill(features.harmonics || 1);
   const expectedTerms = features.seasonLengths.reduce(
-    (sum, sl) => sum + 2 * (features.harmonics || 1), 0
+    (sum, sl, i) => sum + 2 * (harmonics[i] ?? 1), 0
   );
   
   if (features.numTerms !== expectedTerms) {

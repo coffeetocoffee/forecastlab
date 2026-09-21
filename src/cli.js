@@ -27,6 +27,7 @@ import {
   resolveInput,
   versionSatisfies,
   generateFeatures,
+  parseFeatureConfig,
   batchForecast,
 } from './index.js';
 import { createServer, openBrowser } from './serve.js';
@@ -58,6 +59,14 @@ import {
 // Phase 5: Plugin System
 import { registry as pluginRegistry } from '../sdk/core.mjs';
 
+// Streaming: continuous forecasting alongside batch mode
+import {
+  StreamingEngine,
+  FileWatchConnector,
+  WebhookConnector,
+  WebSocketFeedConnector,
+} from './streaming/index.js';
+
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = resolve(HERE, '..', 'examples');
@@ -73,9 +82,9 @@ const VALUE_OPTS = new Set([
   'data', 'project', 'time', 'value', 'name', 'unit', 'season', 'horizon',
   'interval', 'method', 'methods', 'test-size', 'json', 'html', 'csv', 'md',
   'out', 'example', 'agg', 'step', 'seasonality', 'port', 'host', 'report',
-  'features',
+  'features', 'feed', 'webhook', 'replay', 'alert-above', 'alert-below',
 ]);
-const BOOL_OPTS = new Set(['help', 'version', 'resample', 'damped', 'open']);
+const BOOL_OPTS = new Set(['help', 'version', 'resample', 'damped', 'open', 'list', 'install', 'once']);
 
 function parseArgs(argv) {
   const opts = {};
@@ -96,6 +105,12 @@ function parseArgs(argv) {
       opts[storeAs] = val;
     } else if (a === '-h') opts.help = true;
     else positional.push(a);
+  }
+  // A positional after the command names the subcommand and/or the project/data
+  // path, e.g. "plugins list" or "check ."
+  if (positional[1] !== undefined) {
+    opts._ = positional[1];
+    if (opts.project === undefined) opts.project = positional[1];
   }
   return { command: positional[0] ?? null, opts };
 }
@@ -122,6 +137,7 @@ Commands:
   reproduce  Re-run analysis from a report and validate reproducibility
   diff       Compare two reports side by side
   batch      Process multiple series at once (high-volume forecasting)
+  stream     Continuous forecasting: tail a CSV, webhook, or websocket feed
   serve      Local browser workbench over the same engine (live settings)
   methods    Explain every forecasting method in plain language
   demo       Copy a built-in example dataset into a folder
@@ -168,6 +184,12 @@ Common options:
   --port <n>          (serve) port to listen on (default: a free one is chosen)
   --host <addr>       (serve) bind address (default 127.0.0.1; 0.0.0.0 shares on your network)
   --open              (serve) launch the page in your default browser
+  --feed <spec>       (stream) file:<path> | webhook:<port> | ws:<url> (default: tail the project CSV)
+  --once              (stream) process current data once, then exit (no tailing)
+  --webhook <url>     (stream) POST alerts and job completions to this URL
+  --alert-above <n>   (stream) alert when a value exceeds n
+  --alert-below <n>   (stream) alert when a value drops below n
+  --replay <file>     (stream replay) re-feed recorded events from a JSON file
 
 Examples:
   forecastlab demo --example energy
@@ -203,9 +225,12 @@ function cmdInit(opts) {
   let featureConfig = null;
   if (opts.features) {
     try {
-      featureConfig = JSON.parse(opts.features);
+      featureConfig = parseFeatureConfig(JSON.parse(opts.features));
     } catch (e) {
       throw new Error(`Invalid --features JSON: ${e.message}`);
+    }
+    if (!featureConfig || (typeof featureConfig === 'object' && Object.keys(featureConfig).length === 0)) {
+      throw new Error('--features JSON did not configure any features (expected e.g. {"fourier":{"seasonLengths":[24],"harmonics":2}})');
     }
   }
   
@@ -441,21 +466,44 @@ function cmdMethods() {
 function cmdDemo(opts) {
   const id = opts.example ?? 'energy';
   if (!EXAMPLES[id]) throw new Error(`Unknown example "${id}". Choose: ${Object.keys(EXAMPLES).join(', ')}`);
-  const outDir = resolve(process.cwd(), opts.out ?? 'forecastlab-demo');
+  const outDir = resolve(process.cwd(), opts.out ?? join('forecastlab-demo', id));
   mkdirSync(outDir, { recursive: true });
   const { file, project } = EXAMPLES[id];
   copyFileSync(join(EXAMPLES_DIR, file), join(outDir, file));
   copyFileSync(join(EXAMPLES_DIR, project), join(outDir, project));
   console.log(`Copied "${id}" example to ${outDir}`);
   console.log('Next:');
-  console.log(`  forecastlab check --project ${join(basename(outDir), project)}`);
-  console.log(`  forecastlab report --project ${join(basename(outDir), project)}`);
+  console.log(`  cd ${join(basename(resolve(process.cwd(), 'forecastlab-demo')), id)}`);
+  console.log(`  node ../src/cli.js check .`);
+  console.log(`  node ../src/cli.js compare .`);
+  console.log(`  node ../src/cli.js report --html report.html`);
 }
 
 function cmdServe(opts) {
   const port = toPort(opts.port);
   const host = opts.host ?? '127.0.0.1';
-  const server = createServer({ defaults: opts });
+  let streaming = null;
+  if (opts.feed) {
+    const input = resolveInput(opts);
+    const cfg = input.config;
+    const engine = new StreamingEngine({
+      seasonLength: cfg.seasonLength,
+      horizon: cfg.horizon,
+      interval: cfg.interval,
+      method: cfg.method ?? 'auto',
+      damped: cfg.damped ?? false,
+      seasonality: cfg.seasonality ?? 'additive',
+    });
+    engine.addConnector(buildFeedConnector(opts.feed, {
+      seriesId: cfg.name,
+      timeColumn: cfg.timeColumn,
+      valueColumn: cfg.valueColumn,
+      fromStart: true,
+    }));
+    engine.start().catch((e) => console.error(`Streaming engine failed to start: ${e.message}`));
+    streaming = engine;
+  }
+  const server = createServer({ defaults: opts, streaming });
   server.on('error', (e) => {
     console.error(`Error: ${e.message}`);
     process.exit(1);
@@ -470,6 +518,157 @@ function cmdServe(opts) {
     console.log('Same engine as the CLI; every request re-reads your file. Press Ctrl+C to stop.');
     if (opts.open) openBrowser(url);
   });
+}
+
+/**
+ * Stream command: continuous forecasting alongside batch mode.
+ *   forecastlab stream --project x.forecast.json --feed file:data.csv
+ *   forecastlab stream --project x.forecast.json --feed webhook:8081 --once
+ *   forecastlab stream replay --events events.json --project x.forecast.json
+ */
+async function cmdStream(opts) {
+  if (opts._ === 'replay' || opts.replay) return cmdStreamReplay(opts);
+  const input = resolveInput(opts);
+  const cfg = input.config;
+
+  const rules = [];
+  if (opts.alertAbove !== undefined) {
+    rules.push({ id: 'cli-above', kind: 'threshold', field: 'value', op: 'gt', level: Number(opts.alertAbove), webhook: opts.webhook ?? null, message: `value above ${opts.alertAbove}` });
+  }
+  if (opts.alertBelow !== undefined) {
+    rules.push({ id: 'cli-below', kind: 'threshold', field: 'value', op: 'lt', level: Number(opts.alertBelow), webhook: opts.webhook ?? null, message: `value below ${opts.alertBelow}` });
+  }
+  // Always watch for drift so auto-recommissioning is visible.
+  rules.push({ id: 'cli-drift', kind: 'drift', webhook: opts.webhook ?? null });
+
+  const engine = new StreamingEngine({
+    seasonLength: cfg.seasonLength,
+    horizon: cfg.horizon,
+    interval: cfg.interval,
+    method: cfg.method ?? 'auto',
+    methods: cfg.methods ?? null,
+    damped: cfg.damped ?? false,
+    seasonality: cfg.seasonality ?? 'additive',
+    rules,
+  });
+
+  const feedSpec = opts.feed ?? `file:${input.dataPath}`;
+  const connector = buildFeedConnector(feedSpec, {
+    seriesId: cfg.name,
+    timeColumn: cfg.timeColumn,
+    valueColumn: cfg.valueColumn,
+    fromStart: Boolean(opts.once),
+  });
+  engine.addConnector(connector);
+
+  engine.hub.subscribe((event) => {
+    if (event.type === 'update') {
+      console.log(JSON.stringify({
+        series: event.seriesId,
+        t: event.point.iso,
+        value: event.point.value,
+        recomputed: event.recomputed,
+        reason: event.reason,
+        method: event.method,
+        alerts: event.alerts,
+      }));
+    } else if (event.type === 'alert') {
+      console.log(JSON.stringify({ alert: event.alert }));
+    }
+  });
+
+  await engine.start();
+  console.log(`Streaming "${cfg.name}" from ${feedSpec} (mode: stream, Ctrl+C to stop)`);
+
+  // Seed the baseline from the file so fresh starts forecast with full context.
+  // Later rows arrive as live events; timestamp dedupe makes overlap harmless.
+  if (!opts.once && typeof connector.readHistory === 'function') {
+    try {
+      const history = connector.readHistory();
+      const seeded = await engine.seed(cfg.name, history);
+      console.log(JSON.stringify({ seeded: history.length, method: seeded.result?.method ?? null }));
+    } catch (e) {
+      console.log(JSON.stringify({ seedWarning: e.message }));
+    }
+  }
+
+  if (opts.once) {
+    const drained = await engine.drain(30000);
+    await engine.stop();
+    const summary = { drained, status: engine.status(), snapshots: engine.snapshot() };
+    if (opts.json) {
+      writeJson(opts.json, summary);
+      console.log(`Wrote ${resolve(opts.json)}`);
+    } else {
+      console.log(JSON.stringify(summary.status, null, 2));
+    }
+    return;
+  }
+
+  await new Promise((resolve) => {
+    const shutdown = async () => {
+      await engine.stop();
+      const summary = { status: engine.status() };
+      if (opts.json) {
+        writeJson(opts.json, { ...summary, snapshots: engine.snapshot() });
+        console.log(`Wrote ${resolve(opts.json)}`);
+      } else {
+        console.log(JSON.stringify(summary.status, null, 2));
+      }
+      resolve();
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
+}
+
+function buildFeedConnector(spec, defaults) {
+  const idx = spec.indexOf(':');
+  const kind = idx === -1 ? 'file' : spec.slice(0, idx);
+  const rest = idx === -1 ? spec : spec.slice(idx + 1);
+  if (kind === 'file') {
+    return new FileWatchConnector({ path: resolve(process.cwd(), rest), seriesId: defaults.seriesId, timeColumn: defaults.timeColumn, valueColumn: defaults.valueColumn, fromStart: defaults.fromStart });
+  }
+  if (kind === 'webhook') {
+    return new WebhookConnector({ port: Number(rest) || 0, seriesId: defaults.seriesId });
+  }
+  if (kind === 'ws' || kind === 'websocket') {
+    return new WebSocketFeedConnector({ url: rest, seriesId: defaults.seriesId });
+  }
+  throw new Error(`Unknown feed "${kind}". Use file:<path> | webhook:<port> | ws:<url>`);
+}
+
+/** Replay recorded events to answer "what would have happened". */
+async function cmdStreamReplay(opts) {
+  if (!opts.replay) throw new Error('replay needs --replay <events.json>');
+  const eventsPath = resolve(process.cwd(), opts.replay);
+  let events;
+  try {
+    events = JSON.parse(readFileSync(eventsPath, 'utf8'));
+  } catch (e) {
+    throw new Error(`Cannot read events file "${eventsPath}": ${e.message}`);
+  }
+  const rows = Array.isArray(events) ? events : events.events ?? [];
+  // The subcommand word ('replay') lands in opts.project via positional mapping; ignore it.
+  const projectPath = opts.project && opts.project !== 'replay' ? opts.project : null;
+  const input = projectPath ? resolveInput({ ...opts, project: projectPath }) : null;
+  const cfg = input?.config ?? {};
+  const engine = new StreamingEngine({
+    seasonLength: cfg.seasonLength ?? null,
+    horizon: cfg.horizon ?? 24,
+    interval: cfg.interval ?? 80,
+    method: cfg.method ?? 'auto',
+  });
+  const out = await engine.replay(rows, { seriesId: cfg.name });
+  const summary = { processed: out.processed, snapshots: out.snapshots };
+  if (opts.json) {
+    writeJson(opts.json, summary);
+    console.log(`Wrote ${resolve(opts.json)}`);
+  } else {
+    for (const s of summary.snapshots) {
+      console.log(`${s.seriesId}: ${s.points} points, method=${s.result?.method ?? 'none'}, refreshes=${s.refreshCount}`);
+    }
+  }
 }
 
 /** Reproduce command: re-run analysis from a report and validate */
@@ -1053,7 +1252,7 @@ async function cmdInstallPlugin(opts) {
   console.log('Installation API under development...');
 }
 
-export function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2)) {
   const { command, opts } = parseArgs(argv);
   if (opts.version) {
     console.log(VERSION);
@@ -1072,6 +1271,7 @@ export function main(argv = process.argv.slice(2)) {
     case 'reproduce': cmdReproduce(opts); break;
     case 'diff': cmdDiff(opts); break;
     case 'batch': await cmdBatch(opts); break;
+    case 'stream': await cmdStream(opts); break;
     case 'methods': cmdMethods(); break;
     case 'demo': cmdDemo(opts); break;
     case 'serve': cmdServe(opts); break;
@@ -1096,10 +1296,8 @@ export function main(argv = process.argv.slice(2)) {
 
 const invoked = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (invoked) {
-  try {
-    main();
-  } catch (e) {
+  main().catch((e) => {
     console.error(`Error: ${e.message}`);
     process.exit(1);
-  }
+  });
 }

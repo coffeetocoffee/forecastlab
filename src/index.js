@@ -136,3 +136,21 @@ export {
   AdaptiveWeighting,
   SlidingWindow,
 } from './scheduler.js';
+
+// Continuous data processing (streaming layer: classical methods inside,
+// queue + event loop outside)
+export {
+  FeedConnector,
+  FileWatchConnector,
+  WebhookConnector,
+  WebSocketFeedConnector,
+  PollingConnector,
+  normalizePoint,
+  Welford,
+  IncrementalForecaster,
+  JobQueue,
+  toPriority,
+  AlertManager,
+  EventHub,
+  StreamingEngine,
+} from './streaming/index.js';

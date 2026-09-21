@@ -1,0 +1,23 @@
+{
+  "name": "energy-fourier-hourly",
+  "description": "Hourly electricity with daily (24h) and weekly (168h) seasonality, demonstrating Fourier features.",
+  "data": "energy-fourier-hourly.csv",
+  "timeColumn": "timestamp",
+  "valueColumn": "value",
+  "unit": "kWh",
+  "seasonLength": 24,
+  "horizon": 48,
+  "interval": 80,
+  "testSize": null,
+  "resample": false,
+  "agg": "mean",
+  "step": null,
+  "damped": false,
+  "seasonality": "additive",
+  "features": {
+    "autoFourier": true
+  },
+  "method": "auto",
+  "createdWith": "forecastlab init",
+  "requiresVersion": "0.1.0"
+}

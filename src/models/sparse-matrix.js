@@ -221,11 +221,11 @@ export class SparseMatrix {
           ptr1++;
           ptr2++;
         } else if (col1 < col2) {
-          onlyFirst.has entry
+          // Only first matrix has entry at this column
           allEntries.push([i, col1, this.values[ptr1]]);
           ptr1++;
         } else {
-          onlySecond has entry
+          // Only second matrix has entry at this column
           allEntries.push([i, col2, other.values[ptr2]]);
           ptr2++;
         }

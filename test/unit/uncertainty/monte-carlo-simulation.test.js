@@ -1,6 +1,7 @@
 // Unit Tests for Monte Carlo Simulation - ForecastLab Phase 4B
 
-import { MonteCarloSimulator } from '../../src/uncertainty.js';
+import { test, suite } from 'node:test';
+import { MonteCarloSimulator } from '../../../src/uncertainty.js';
 import { strict as assert } from 'node:assert';
 
 suite('MonteCarloSimulator', () => {
@@ -121,12 +122,12 @@ suite('MonteCarloSimulator', () => {
     assert.ok(typeof metrics.downsideProbability === 'number');
   });
 
-  test('should handle very small number of simulations', () => {
+  test('should handle very small number of simulations', async () => {
     const simulator = new MonteCarloSimulator({ nSims: 10 });
-    
+
     const model = { stdDev: 1, lastValue: 50 };
-    const paths = simulator.simulatePaths(model, 5);
-    
+    const paths = await simulator.simulatePaths(model, 5);
+
     assert.strictEqual(paths.length, 10);
   });
 

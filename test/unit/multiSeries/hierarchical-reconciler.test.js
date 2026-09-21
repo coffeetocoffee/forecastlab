@@ -1,6 +1,7 @@
 // Unit Tests for HierarchicalReconciler - ForecastLab Phase 4A
 
-import { HierarchicalReconciler } from '../../src/multiSeries.js';
+import { test, suite } from 'node:test';
+import { HierarchicalReconciler } from '../../../src/multiSeries.js';
 import { strict as assert } from 'node:assert';
 
 const VERSION = await import('node:os').then(os => os.platform());
@@ -38,17 +39,20 @@ suite('HierarchicalReconciler', () => {
 
     const reconciler = new HierarchicalReconciler(config);
     const matrix = reconciler.buildAggregationMatrix();
-    
+
+    // The matrix is indexed by node position (the order the series were declared in)
+    const idx = (id) => Object.keys(config.series).indexOf(id);
+
     // total should include all children
-    assert.strictEqual(matrix[0]['l1a'], 1);
-    assert.strictEqual(matrix[0]['l1b'], 1);
+    assert.strictEqual(matrix[0][idx('l1a')], 1);
+    assert.strictEqual(matrix[0][idx('l1b')], 1);
   });
 
   test('should identify base level nodes correctly', () => {
     const config = {
       levels: ['region', 'product'],
       series: {
-        'total': ['na', 'na'],
+        'total': [],
         'east': ['east'],
         'east_electronics': ['east', 'electronics']
       }

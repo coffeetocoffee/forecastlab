@@ -1,0 +1,21 @@
+{
+  "name": "river-daily",
+  "description": "",
+  "data": "river-daily.csv",
+  "timeColumn": "timestamp",
+  "valueColumn": "value",
+  "unit": "m",
+  "seasonLength": 365,
+  "horizon": 14,
+  "interval": 80,
+  "testSize": null,
+  "resample": false,
+  "agg": "mean",
+  "step": null,
+  "damped": false,
+  "seasonality": "additive",
+  "features": null,
+  "method": "auto",
+  "createdWith": "forecastlab init",
+  "requiresVersion": "0.1.0"
+}

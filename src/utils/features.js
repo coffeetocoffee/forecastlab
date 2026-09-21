@@ -63,9 +63,11 @@ export function generateFeatures(input) {
     };
   }
   
-  // Auto-detect mode
+  // Auto-detect mode.
+  // maxLag defaults to ~n/2 inside autoFourier: a period longer than half the
+  // sample cannot be estimated and makes the design matrix near-singular.
   if (featureConfig.autoFourier) {
-    const result = autoFourier({ values }, { maxLag: 500, K: 2 });
+    const result = autoFourier({ values }, { K: 2 });
     return {
       ...result,
       usesFeatures: true,

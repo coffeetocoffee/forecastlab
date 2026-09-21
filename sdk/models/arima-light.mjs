@@ -27,8 +27,10 @@ export class ARIMALight {
    * @param {Object} params - Configuration options
    */
   fit(data, params = {}) {
-    const values = Array.isArray(data[0]) ? data : data.map(d => d.value);
-    
+    // Accept numbers, { value } objects, or a nested array of values
+    const toValue = (d) => (typeof d === 'number' ? d : d.value);
+    const values = Array.isArray(data[0]) ? data.flat().map(toValue) : data.map(toValue);
+
     // Store basic statistics
     this.#mean = values.reduce((a, b) => a + b, 0) / values.length;
     this.#trend = this.#calculateTrend(values);

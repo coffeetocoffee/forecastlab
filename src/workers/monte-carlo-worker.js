@@ -1,11 +1,12 @@
 // Worker script for parallel Monte Carlo simulations
 // Runs individual MC paths in isolated Web Workers
 
-importScripts('./worker-pool.js');
+import { WorkerPool, MonteCarloTask } from './worker-pool.js';
 
 let pool = null;
 
-self.onmessage = function(event) {
+if (typeof self !== 'undefined') {
+  self.onmessage = function(event) {
   const { type, data } = event.data;
   
   if (type === 'init') {
@@ -97,4 +98,5 @@ self.onmessage = function(event) {
 };
 
 // Export functions for use with WorkerPool
-self.MonteCarloTask = MonteCarloTask;
+  self.MonteCarloTask = MonteCarloTask;
+}

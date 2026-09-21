@@ -1,7 +1,7 @@
 {
   "name": "forecastlab",
-  "version": "4.0.0",
-  "description": "A local-first forecasting workbench: import time-series CSV data, check quality, compare explainable forecasting methods, and publish reproducible reports. Zero dependencies.",
+  "version": "7.2.0",
+  "description": "A local-first forecasting workbench: import time-series CSV data, check quality, compare explainable forecasting methods, and publish reproducible reports. Zero runtime dependencies; the browser workbench loads D3 from a CDN.",
   "type": "module",
   "bin": {
     "forecastlab": "src/cli.js"
@@ -19,32 +19,31 @@
     "./counterfactual.js": "./src/counterfactual.js",
     "./scheduler.js": "./src/scheduler.js",
     "./causal.js": "./src/causal.js",
+    "./streaming": "./src/streaming/index.js",
     "./visualizations": "./src/visualizations/index.js",
     "./workers": "./src/workers/index.js",
     "./scenarios": "./src/scenarios-index.js"
   },
   "files": [
     "src",
+    "sdk",
     "examples",
     "docs",
     "test"
   ],
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node --test \"test/unit/**/*.test.js\" \"test/streaming/**/*.test.js\" \"sdk/test/*.mjs\"",
     "test:unit": "node --test \"test/unit/**/*.test.js\"",
-    "test:integration": "node --test \"test/integration/**/*.test.js\"",
-    "test:golden": "node --test \"test/golden.test.mjs\"",
+    "test:streaming": "node --test \"test/streaming/**/*.test.js\"",
+    "test:sdk": "node --test \"sdk/test/*.mjs\"",
     "examples": "node scripts/make-examples.mjs",
-    "demo": "node src/cli.js report --project examples/energy.forecast.json --html out/report.html --json out/report.json",
-    "phase4:test": "npm run test:unit && npm run test:integration",
+    "demo": "node src/cli.js demo --example energy",
     "phase4:docs": "echo 'Generate tutorial notebooks from docs/tutorial/'"
   },
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "d3": "^7.8.0"
-  },
+  "dependencies": {},
   "keywords": [
     "forecasting",
     "time-series",

@@ -15,7 +15,11 @@
 import { fit, applicableMethods, METHODS } from './models.js';
 import { splitTrainTest } from './series.js';
 
-/** Standard normal CDF using a rational approximation (Abramowitz & Stege 26.2.5). */
+/**
+ * Standard normal CDF.
+ * Uses the Abramowitz & Stegun 7.1.26 rational approximation for erf, with the
+ * argument scaled by 1/sqrt(2) since Phi(x) = 0.5 * (1 + erf(x / sqrt(2))).
+ */
 export function normCdf(x) {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
@@ -24,9 +28,9 @@ export function normCdf(x) {
   const a5 = 1.061405429;
   const p = 0.3275911;
   const sign = x < 0 ? -1 : 1;
-  x = Math.abs(x);
-  const t = 1 / (1 + p * x);
-  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  const z = Math.abs(x) / Math.SQRT2;
+  const t = 1 / (1 + p * z);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-z * z);
   return 0.5 * (1 + sign * y);
 }
 
@@ -453,10 +457,12 @@ export function defaultTestSize(count) {
  * Returns { testSize, splitIndex, results: [{ method, title, mae, rmse, mape, smape, mase }], best }.
  */
 export function backtest(values, options = {}) {
-  const { seasonLength = null, interval = 80, damped = false, seasonality = 'additive' } = options;
+  const { seasonLength = null, interval = 80, damped = false, seasonality = 'additive', features = null } = options;
   const testSize = options.testSize ?? defaultTestSize(values.length);
   const { train, test } = splitTrainTest(values, testSize);
-  const ids = options.methods ?? applicableMethods(train.length, seasonLength);
+  // GLM needs exogenous/Fourier features; drop it when none are configured.
+  const ids = (options.methods ?? applicableMethods(train.length, seasonLength))
+    .filter((id) => id !== 'glm' || features);
   if (ids.length === 0) {
     throw new Error('No forecasting method applies to this data (too short, or no --season given)');
   }
@@ -465,7 +471,7 @@ export function backtest(values, options = {}) {
   for (const id of ids) {
     if (!METHODS[id]) throw new Error(`Unknown method "${id}"`);
     if (!applicableMethods(train.length, seasonLength).includes(id)) continue;
-    const f = fit(train, id, { horizon: test.length, seasonLength, interval, damped, seasonality });
+    const f = fit(train, id, { horizon: test.length, seasonLength, interval, damped, seasonality, features });
     results.push({
       method: id,
       title: f.title,

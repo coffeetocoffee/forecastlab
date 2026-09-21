@@ -1,8 +1,6 @@
 // Sankey diagram for visualizing scenario trees and probability flows
 // Shows transitions between different forecast scenarios
-
-import { hierarchy, packSiblings } from 'd3-hierarchy';
-import { linkSankey, sankeyStack } from 'd3-sankey';
+// Requires d3 (loaded as a global by the served workbench UI)
 
 /**
  * Scenario Tree Sankey Diagram Component
@@ -55,14 +53,14 @@ export class ScenarioTreeSankey {
     const gLabels = this.svg.append('g').attr('class', 'labels');
     
     // Apply Sankey layout
-    const sankeyLayout = linkSankey()
+    const sankeyLayout = d3.linkSankey()
       .nodeWidth(15)
       .nodePadding(20)
       .extent([[this.margin.left, this.margin.top], 
                [this.width - this.margin.right, this.height - this.margin.bottom]]);
     
-    const sankey = hierarchy(sankeyData.nodes[0])
-      .reef()
+    const sankey = d3.hierarchy(sankeyData.nodes[0])
+      .sum(d => d.value || 0)
       .sort((a, b) => b.value - a.value);
     
     sankeyLayout([sankey]);

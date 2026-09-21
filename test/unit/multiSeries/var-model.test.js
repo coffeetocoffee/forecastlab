@@ -59,17 +59,21 @@ suite('VARModel', () => {
     assert.ok(result.rSquared <= 1.0);
   });
 
-  test('should forecast ahead steps', () => {
+  test('should forecast ahead steps', async () => {
     const model = new VARModel(1);
-    
-    // Mock coefficients for testing
-    model.coefficients = [0.5, 0.3];
-    
-    // Test forecast method doesn't throw (actual values depend on implementation)
+
+    const timeSeriesMatrix = [
+      [1, 2, 3, 4, 5, 6, 7, 8],
+      [2, 4, 6, 8, 10, 12, 14, 16]
+    ];
+    await model.fit(timeSeriesMatrix);
+
     const forecasts = model.forecast(3);
-    
+
     assert.ok(Array.isArray(forecasts));
     assert.strictEqual(forecasts.length, 3);
+    assert.ok(forecasts.every((f) => Array.isArray(f) && f.length === 2));
+    assert.ok(forecasts.flat().every((v) => Number.isFinite(v)));
   });
 
   test('should handle different lag orders', async () => {

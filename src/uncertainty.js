@@ -1,11 +1,13 @@
 /**
  * Uncertainty Quantification Module - ForecastLab Phase 4B
- * 
+ *
  * Advanced uncertainty analysis including cumulative intervals, joint bands,
  * density forecasts, and scenario trees.
- * 
+ *
  * @module uncertainty
  */
+
+import { normCdf } from './evaluate.js';
 
 class MonteCarloSimulator {
     /**
@@ -26,7 +28,8 @@ class MonteCarloSimulator {
     _random() {
         // LCG parameters (same as MINSTD)
         this._randomState = (this._randomState * 48271) % 2147483647;
-        return (this._randomState - 0.5) / 1073741823.5;
+        // Map the state in [1, 2147483646] onto [0, 1)
+        return (this._randomState - 1) / 2147483646;
     }
 
     /**
@@ -188,64 +191,29 @@ class MonteCarloSimulator {
     }
 
     _inverseNormalCDF(p) {
-        // Approximation of inverse normal CDF (probit function)
-        const a = [
-            -3.96968302866544169315524e+01,
-             2.20946098424587858582870e+02,
-            -2.75928510446968701009783e+02,
-             1.38357751867269012702094e+02,
-            -3.06647980661471618496544e+01,
-             2.50662827745923923834828e+00
-        ];
-
-        const b = [
-            -5.44760987982240727944965e+01,
-             1.61585836858040985915013e+02,
-            -1.55698979859886867682638e+02,
-             6.68013118877197230197186e+01,
-            -1.32806815546903449727853e+01
-        ];
-
-        const c = [
-             1.42491194122703712079064e+00,
-            -0.72005192779834566726932e-01,
-             0.42443190326127427127162e-02,
-            -0.35270963896523026921220e-04,
-             0.32351674091697045413728e-06
-        ];
-
-        const d = [
-             1.00000000000000000000000e+00,
-            -1.97084045093032710452237e-01,
-             1.33027120943298478533097e-02,
-            -6.38687941250142696399065e-04,
-             4.50290268944598630882325e-06,
-            -1.40267973036841177879706e-07
-        ];
-
         if (p <= 0 || p >= 1) {
             throw new Error('p must be strictly between 0 and 1');
         }
 
-        const ll = 0.5 - p;
-        let sign = 1;
-        if (ll > 0) {
-            sign = -1;
-            ll = p - 0.5;
+        // Invert the engine's own normal CDF with Newton's method, keeping the
+        // forward and inverse transforms consistent by construction.
+        // Start from a rough rational estimate, then refine with the exact CDF.
+        const estimate = p - 0.5;
+        let z = estimate === 0 ? 0 : estimate * (1 + 0.1 * Math.abs(estimate));
+
+        for (let i = 0; i < 60; i++) {
+            const cdf = normCdf(z);
+            const pdf = Math.exp(-0.5 * z * z) / Math.SQRT2 / Math.sqrt(Math.PI);
+            const step = pdf === 0 ? 0 : (cdf - p) / pdf;
+            z -= step;
+            if (Math.abs(step) < 1e-12) break;
+            // Keep the iterate bounded; the normal CDF is monotone, so bisection-style
+            // clamping guarantees convergence even from a poor start.
+            if (p < 0.5) z = Math.max(z, -40);
+            else z = Math.min(z, 40);
         }
 
-        if (ll <= 0.42) {
-            const zz = 0.5 - 2.0 * ll;
-            const xx = ll * ll;
-            const num = (((((a[0] * xx + a[1]) * xx + a[2]) * xx + a[3]) * xx + a[4]) * xx + a[5]) * ll;
-            const den = (((((b[0] * xx + b[1]) * xx + b[2]) * xx + b[3]) * xx + b[4]) * xx + 1.0);
-            return sign * (num / den + zz);
-        }
-
-        const zz = Math.sqrt(-2.0 * Math.log(ll));
-        const x = (((((c[0] * zz + c[1]) * zz + c[2]) * zz + c[3]) * zz + c[4]) * zz + c[5]);
-        const y = (((((d[0] * zz + d[1]) * zz + d[2]) * zz + d[3]) * zz + d[4]) * zz + d[5]) * zz + 1.0;
-        return sign * (x / y + zz);
+        return z;
     }
 }
 

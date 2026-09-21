@@ -6,3 +6,4 @@ export * from './hierarchical-reconciliation.js';
 export * from './progress-indicators.js';
 export * from './causal-graph.js';
 export * from './counterfactual-chart.js';
+export * from './streaming-chart.js';

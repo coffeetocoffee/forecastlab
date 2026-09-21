@@ -1,9 +1,6 @@
 // D3.js-based joint prediction band chart for Monte Carlo simulations
 // Shows multiple confidence bands and individual forecast paths
-
-import { scaleLinear, scaleTime } from 'd3-scale';
-import { curveMonotoneX } from 'd3-shape';
-import { axisBottom, axisLeft } from 'd3-axis';
+// Requires d3 (loaded as a global by the served workbench UI)
 
 /**
  * Joint Prediction Band Chart Component
@@ -60,7 +57,7 @@ export class PredictionBandChart {
     const gAnnotations = this.svg.append('g').attr('class', 'annotations');
     
     // Calculate scales
-    const xScale = scaleTime()
+    const xScale = d3.scaleTime()
       .domain(d3.extent(timestamps))
       .range([this.margin.left, this.width - this.margin.right]);
     
@@ -72,7 +69,7 @@ export class PredictionBandChart {
         .filter(v => v !== null && Number.isFinite(v))
     ];
     
-    const yScale = scaleLinear()
+    const yScale = d3.scaleLinear()
       .domain(d3.extent(allValues).map(v => v * 0.99))
       .range([this.height - this.margin.bottom, this.margin.top]);
     
@@ -164,7 +161,7 @@ export class PredictionBandChart {
     g.append('g')
       .attr('class', 'y-axis')
       .attr('transform', `translate(${this.margin.left},0)`)
-      .call(axisLeft(yScale)
+      .call(d3.axisLeft(yScale)
         .ticks(6)
         .tickFormat(d3.format('.2f')))
       .call(g => g.select('.domain').attr('stroke', '#e5e7eb'))
@@ -182,7 +179,7 @@ export class PredictionBandChart {
     g.append('g')
       .attr('class', 'x-axis')
       .attr('transform', `translate(0,${this.height - this.margin.bottom})`)
-      .call(axisBottom(xScale)
+      .call(d3.axisBottom(xScale)
         .ticks(10)
         .tickFormat(d3.timeFormat('%Y-%m-%d')))
       .call(g => g.select('.domain').attr('stroke', '#e5e7eb'))
@@ -201,7 +198,7 @@ export class PredictionBandChart {
     const linePath = d3.line()
       .x(d => xScale(d.time))
       .y(d => yScale(d.value))
-      .curve(curveMonotoneX);
+      .curve(d3.curveMonotoneX);
     
     g.append('path')
       .datum(history)
@@ -246,7 +243,7 @@ export class PredictionBandChart {
         .x(d => xScale(d.time))
         .y0(d => yScale(p.upperBound[d.index]))
         .y1(d => yScale(p.lowerBound[d.index]))
-        .curve(curveMonotoneX);
+        .curve(d3.curveMonotoneX);
       
       g.append('path')
         .datum(p.values)
@@ -258,7 +255,7 @@ export class PredictionBandChart {
       const upperLine = d3.line()
         .x(d => xScale(d.time))
         .y(d => yScale(p.upperBound[d.index]))
-        .curve(curveMonotoneX);
+        .curve(d3.curveMonotoneX);
       
       g.append('path')
         .datum(p.values)
@@ -271,7 +268,7 @@ export class PredictionBandChart {
       const lowerLine = d3.line()
         .x(d => xScale(d.time))
         .y(d => yScale(p.lowerBound[d.index]))
-        .curve(curveMonotoneX);
+        .curve(d3.curveMonotoneX);
       
       g.append('path')
         .datum(p.values)
@@ -286,7 +283,7 @@ export class PredictionBandChart {
     const linePath = d3.line()
       .x(d => xScale(d.time))
       .y(d => yScale(d.mean))
-      .curve(curveMonotoneX);
+      .curve(d3.curveMonotoneX);
     
     g.append('path')
       .datum(forecast)
@@ -317,7 +314,7 @@ export class PredictionBandChart {
       const linePath = d3.line()
         .x(d => xScale(d.time))
         .y(d => yScale(d.value))
-        .curve(curveMonotoneX);
+        .curve(d3.curveMonotoneX);
       
       g.append('path')
         .datum(path)

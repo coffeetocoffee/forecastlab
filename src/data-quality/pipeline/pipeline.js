@@ -8,7 +8,7 @@
  * - Progress tracking and rollback capability
  */
 
-import { DataQualityEngine } from '../data-quality/data-engine.js';
+import { DataQualityEngine } from '../data-engine.js';
 import { SnapshotStore } from '../snapshots/snapshot-store.js';
 import { WebhookManager } from '../webhooks/webhook-manager.js';
 import { MultiSeriesCorrelator } from '../correlation/multi-series-correlator.js';

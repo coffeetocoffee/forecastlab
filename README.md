@@ -39,9 +39,9 @@ node src/cli.js demo --example energy
 
 # Check quality, compare methods, generate report
 cd forecastlab-demo/energy
-node ../src/cli.js check .
-node ../src/cli.js compare .
-node ../src/cli.js report --html report.html
+node ../../src/cli.js check .
+node ../../src/cli.js compare .
+node ../../src/cli.js report --html report.html
 ```
 
 Open `report.html` in your browser — **that's it!**
@@ -72,6 +72,7 @@ node src/cli.js report --project measurements.forecast.json \
 | `compare` | ⚔️ Backtest & rank methods | `node src/cli.js compare --method auto` |
 | `forecast` | 🔮 Generate predictions | `node src/cli.js forecast --horizon 48` |
 | `report` | 📄 Create HTML/JSON report | `node src/cli.js report --html report.html` |
+| `stream` | 📡 Continuous forecasting: tail a CSV, webhook, or websocket | `node src/cli.js stream --project x.forecast.json --feed file:data.csv` |
 | `serve` | 🌐 Open interactive workbench | `node src/cli.js serve --open` |
 | `methods` | 📖 Learn about algorithms | `node src/cli.js methods` |
 | `plugins` | 🔌 List installed plugins | `node src/cli.js plugins --list` |
@@ -192,6 +193,7 @@ Every step is documented, reproducible, and makes sense.
 - [Methods Reference](./docs/methods.md) - Every algorithm decoded
 - [Causal Guide](./docs/causal.md) - Why series move: relationships, what-ifs, events, counterfactuals
 - [Plugin SDK](./sdk/README.md) - Extend ForecastLab
+- [Streaming](./docs/streaming.md) - Continuous forecasting alongside batch mode
 - [Roadmap](./docs/roadmap.md) - Where we're heading
 
 ---
@@ -199,9 +201,9 @@ Every step is documented, reproducible, and makes sense.
 ## 🎯 Non-Goals (So You Know)
 
 - ❌ **No ML** - We stick to classical statistics
-- ❌ **No ARIMA** - Too complex for our philosophy
+- ❌ **No ARIMA in the core engine** - The `sdk/models/arima-light.mjs` example plugin shows how the plugin API works, but the built-in engine stays simple and explainable
 - ❌ **No API Keys** - Never create accounts
-- ❌ **No Real-time** - Batch processing only
+- ✅ **Real-time, the honest way** - `stream` tails live feeds with the same classical methods (formerly a non-goal; see [streaming](./docs/streaming.md))
 - ❌ **No Deployment** - `serve` is local-only
 
 ---
@@ -210,17 +212,29 @@ Every step is documented, reproducible, and makes sense.
 
 ```
 forecastlab/
-├── src/           🔧 Core engine & CLI
-│   ├── models/    ← Statistical forecasting methods
-│   ├── methods/   ← Algorithm implementations
-│   └── cli.js     ← Main command interface
-├── sdk/           🧩 Plugin ecosystem (v4.0!)
-│   ├── core.mjs   ← Plugin registry
-│   └── models/    ← Example plugins
-├── examples/      📊 Demo datasets
-├── docs/          📖 Documentation
-├── test/          ✨ Test suite
-└── scripts/       🛠️ Helper utilities
+├── src/                  🔧 Core engine & CLI
+│   ├── cli.js            ← Main command interface
+│   ├── models.js         ← Forecasting methods (naive, Holt-Winters, STL, Theta, …)
+│   ├── evaluate.js       ← Backtesting & significance tests
+│   ├── methods/          ← STL / Theta / Croston / Box-Cox implementations
+│   ├── utils/            ← Fourier features & feature engineering
+│   ├── data-quality/     ← Data quality engine, snapshots, pipelines
+│   ├── multiSeries.js    ← Hierarchical reconciliation, VAR, factor models
+│   ├── uncertainty.js    ← Monte Carlo & predictive densities
+│   ├── counterfactual.js ← What-if / scenario analysis
+│   ├── scheduler.js      ← Adaptive weighting & sliding windows
+│   ├── streaming/        ← Continuous forecasting: connectors, queue, alerts
+│   ├── scenarios/        ← Business scenario libraries
+│   ├── visualizations/   ← Browser chart components (D3, loaded from CDN)
+│   └── workers/          ← Web-worker pool for parallel simulation
+├── sdk/                  🧩 Plugin ecosystem (v4.0!)
+│   ├── core.mjs          ← Plugin registry
+│   └── models/           ← Example plugins
+├── examples/             📊 Demo datasets + project files
+├── docs/                 📖 Documentation
+├── test/unit/            ✨ Test suite
+├── test/streaming/       ✨ Streaming tests
+└── scripts/              🛠️ Helper utilities
 ```
 
 ---

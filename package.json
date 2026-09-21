@@ -32,7 +32,7 @@
     "test"
   ],
   "scripts": {
-    "test": "node --test \"test/unit/**/*.test.js\" \"test/streaming/**/*.test.js\" \"sdk/test/*.mjs\"",
+    "test": "node --test",
     "test:unit": "node --test \"test/unit/**/*.test.js\"",
     "test:streaming": "node --test \"test/streaming/**/*.test.js\"",
     "test:sdk": "node --test \"sdk/test/*.mjs\"",

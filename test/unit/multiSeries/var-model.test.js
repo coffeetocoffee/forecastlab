@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for VAR Model - ForecastLab Phase 4A
 
-import { VARModel } from '../../src/multiSeries.js';
+import { VARModel } from '../../../src/multiSeries.js';
 import { strict as assert } from 'node:assert';
 
 suite('VARModel', () => {

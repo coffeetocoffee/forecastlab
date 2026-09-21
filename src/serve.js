@@ -22,7 +22,7 @@ import {
   describeBacktest,
   describeForecast,
 } from './index.js';
-import { MonteCarloSimulation } from './uncertainty.js';
+import { MonteCarloSimulator } from './uncertainty.js';
 import { HierarchicalReconciler } from './multiSeries.js';
 import * as scenarios from './scenarios/index.js';
 
@@ -185,7 +185,7 @@ async function handleSimulation(searchParams, defaults) {
   
   const volatility = fitted.sigma || 0.3;
   
-  const mc = new MonteCarloSimulation({
+  const mc = new MonteCarloSimulator({
     method: method,
     horizon: horizon,
     numPaths: numPaths,

@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for Update Scheduler - ForecastLab Phase 4D
 
-import { UpdateScheduler, EventTriggerSystem, AdaptiveWeighting, SlidingWindow } from '../../src/scheduler.js';
+import { UpdateScheduler, EventTriggerSystem, AdaptiveWeighting, SlidingWindow } from '../../../src/scheduler.js';
 import { strict as assert } from 'node:assert';
 
 suite('UpdateScheduler', () => {

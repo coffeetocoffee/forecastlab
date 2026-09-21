@@ -25,6 +25,7 @@ No hidden algorithms. No black boxes. Just honest, explainable classical statist
 - ✅ **Plugin Ecosystem** — Build custom models with our SDK (v4.0!)
 - ✅ **Local First** — Your data never leaves your machine
 - ✅ **Classic Methods** — Naive, Holt-Winters, STL, Theta, and more
+- ✅ **Causal Understanding** — Discover *why* series move: lagged relationships, what-if simulations, external events, counterfactuals — all classical statistics, no ML
 
 ---
 
@@ -74,6 +75,10 @@ node src/cli.js report --project measurements.forecast.json \
 | `serve` | 🌐 Open interactive workbench | `node src/cli.js serve --open` |
 | `methods` | 📖 Learn about algorithms | `node src/cli.js methods` |
 | `plugins` | 🔌 List installed plugins | `node src/cli.js plugins --list` |
+| `causal graph` | 🕸️ Discover how variables affect each other | `node src/cli.js causal graph --data examples/causal-energy.csv --season 24 --html causal.html` |
+| `causal what-if` | 🧪 Simulate "what if we changed X?" | `node src/cli.js causal what-if --data examples/causal-energy.csv --variable temperature --target demand --change 5` |
+| `causal factors` | 📅 Measure external events (holidays, promos) | `node src/cli.js causal factors --data examples/causal-energy.csv --value demand --factors examples/causal-factors.json --season 24` |
+| `causal counterfactual` | 🔀 Actual vs "what would have happened" | `node src/cli.js causal counterfactual --data examples/causal-sales.csv --event-date 2026-04-01` |
 
 ---
 
@@ -129,8 +134,41 @@ Try these real-world datasets:
 - ⚡ **energy** - Hourly building electricity (daily + weekly patterns)
 - 🌊 **river** - Daily water levels (long-term trends)
 - 🌡️ **temp** - Mean daily temperature (seasonal cycles)
+- 🕸️ **causal** - Hourly energy market: temperature and price driving demand (for the `causal` commands)
 
 Each comes with project files ready to explore!
+
+---
+
+## 🧠 Causal Understanding (No Machine Learning)
+
+ForecastLab answers **why** a series moves, not just what it will do next — using
+only classical statistics you can audit line by line:
+
+- **Relationship builder** — discovers lagged links between variables
+  (temperature → demand at lag 0, price → demand at lag 1), each with a lag
+  profile, a per-unit effect, a Granger-style F-test p-value, and a 0–1
+  confidence score. `--html` opens a **drag-and-drop graph**: rearrange nodes,
+  and test your own hypotheses by dragging from a node's green handle onto
+  another node — the statistics re-run instantly in your browser.
+- **Intervention simulator** — "what if we changed X?" propagates the change
+  through the fitted impulse response (no unexplained multipliers), with
+  uncertainty bands, extrapolation warnings, and natural experiments found in
+  history.
+- **External factor integration** — register holidays, promotions, or weather
+  series with temporal decay kernels (box, exponential, triangular, gaussian,
+  step), get each factor's measured effect, and rank them by impact magnitude
+  against a seasonal baseline.
+- **Counterfactual engine** — builds a control group of similar periods and
+  computes difference-in-differences with a t-test, so you can compare what
+  happened against what would have happened.
+
+```bash
+node src/cli.js demo --example causal
+node src/cli.js causal graph --data examples/causal-energy.csv --season 24 --html causal.html
+```
+
+👉 [Causal guide](./docs/causal.md) — methods, options, and the programmatic API
 
 ---
 
@@ -152,6 +190,7 @@ Every step is documented, reproducible, and makes sense.
 - [Data Format Guide](./docs/data-format.md) - How to structure your CSV
 - [Workflow Tutorial](./docs/workflow.md) - Best practices explained
 - [Methods Reference](./docs/methods.md) - Every algorithm decoded
+- [Causal Guide](./docs/causal.md) - Why series move: relationships, what-ifs, events, counterfactuals
 - [Plugin SDK](./sdk/README.md) - Extend ForecastLab
 - [Roadmap](./docs/roadmap.md) - Where we're heading
 

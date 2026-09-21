@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for Monte Carlo Simulation - ForecastLab Phase 4B
 
-import { MonteCarloSimulator } from '../../src/uncertainty.js';
+import { MonteCarloSimulator } from '../../../src/uncertainty.js';
 import { strict as assert } from 'node:assert';
 
 suite('MonteCarloSimulator', () => {

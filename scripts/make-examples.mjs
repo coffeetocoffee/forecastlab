@@ -29,6 +29,10 @@ function toCsv(rows) {
   return 'timestamp,value\n' + rows.map(([t, v]) => `${t},${v}`).join('\n') + '\n';
 }
 
+function toWideCsv(header, rows) {
+  return header.join(',') + '\n' + rows.map((r) => r.join(',')).join('\n') + '\n';
+}
+
 function writeProject(filename, project) {
   writeFileSync(join(root, filename), JSON.stringify(project, null, 2) + '\n', 'utf8');
 }
@@ -121,3 +125,81 @@ function writeProject(filename, project) {
 }
 
 console.log('Wrote examples to', root);
+
+// --- 4. Hourly energy market: temperature and price drive demand (causal demo) ---
+// A wide CSV for "causal graph" / "causal what-if": demand responds to a
+// temperature anomaly at lags 0-2 and to the previous hour's slow price
+// movement, on top of a daily cycle. A three-day heat wave mid-month provides
+// a natural experiment. Pass --season 24 to the causal commands so the shared
+// daily cycle is removed and the true effect sizes surface.
+{
+  const rng = mulberry32(424242);
+  const start = Date.UTC(2026, 6, 1, 0, 0, 0); // 2026-07-01
+  const hours = 28 * 24;
+  const dayOf = (i) => Math.floor(i / 24);
+  const heat = (i) => {
+    const d = dayOf(i);
+    return d >= 11 && d <= 13 ? 7 * Math.exp(-Math.pow((d - 12) / 0.9, 2)) : 0;
+  };
+  // Slow weather wave and slow price movement: these survive deseasonalizing
+  // the daily cycle, so they are what the causal tests can actually see.
+  const tempAnom = new Array(hours);
+  const priceSlow = new Array(hours);
+  for (let i = 0; i < hours; i++) {
+    tempAnom[i] = 4 * Math.sin((2 * Math.PI * dayOf(i)) / 11 + 0.3) + heat(i) + 0.7 * gauss(rng);
+    priceSlow[i] = 0.02 * Math.sin((2 * Math.PI * dayOf(i)) / 9 + 1.7) + 0.006 * gauss(rng);
+  }
+  const rows = [];
+  for (let i = 0; i < hours; i++) {
+    const d = new Date(start + i * 3600 * 1000);
+    const h = d.getUTCHours();
+    const weekday = d.getUTCDay();
+    const daily = 140 * Math.sin((2 * Math.PI * (h - 13)) / 24) + 28 * Math.sin((4 * Math.PI * (h - 6)) / 24);
+    const weekend = weekday === 0 || weekday === 6 ? -45 : 0;
+    const cooling =
+      4.5 * tempAnom[i] +
+      2.2 * (tempAnom[i - 1] ?? 0) +
+      0.8 * (tempAnom[i - 2] ?? 0);
+    const priceResponse = -1500 * (priceSlow[i - 1] ?? 0);
+    const temperature = 19 + 7 * Math.sin((2 * Math.PI * (h - 15)) / 24) + tempAnom[i];
+    const price = 0.12 + 0.03 * Math.sin((2 * Math.PI * (h - 18)) / 24) + priceSlow[i];
+    const demand = Math.max(50, 520 + daily + weekend + cooling + priceResponse + 12 * gauss(rng));
+    rows.push([d.toISOString(), temperature.toFixed(2), price.toFixed(4), demand.toFixed(1)]);
+  }
+  writeFileSync(join(root, 'causal-energy.csv'), toWideCsv(['timestamp', 'temperature', 'price', 'demand'], rows), 'utf8');
+
+  // Known external events over the same window, for "causal factors".
+  writeFileSync(join(root, 'causal-factors.json'), JSON.stringify({
+    events: [
+      { name: 'heatwave', start: '2026-07-12', duration: 24 * 3, decay: 'exponential' },
+      { name: 'price-spike', start: '2026-07-18T18:00:00', duration: 6, decay: 'triangular' },
+      { name: 'stadium-event', start: '2026-07-25', duration: 24 * 2, decay: 'box' },
+    ],
+  }, null, 2) + '\n', 'utf8');
+}
+
+// --- 5. Daily product sales with a two-week promotion (counterfactual demo) ---
+// A single intervention on 2026-04-01 so "causal counterfactual" can measure
+// the lift against control windows taken from the rest of the same series.
+{
+  const rng = mulberry32(515151);
+  const start = Date.UTC(2026, 2, 1, 0, 0, 0); // 2026-03-01
+  const days = 26 * 7; // half a year
+  const promoStart = 31; // 2026-04-01
+  const promoLen = 14;
+  const rows = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start + i * 86400 * 1000);
+    const weekday = d.getUTCDay();
+    const weekly = weekday === 0 || weekday === 6 ? -12 : (weekday === 5 ? 8 : 0);
+    let promo = 0;
+    if (i >= promoStart && i < promoStart + promoLen) {
+      promo = 34 * Math.min(1, (i - promoStart + 1) / 2) * Math.min(1, (promoStart + promoLen - i) / 2);
+    }
+    const v = 120 + weekly + promo + 0.35 * i + 6 * gauss(rng);
+    rows.push([d.toISOString(), v.toFixed(2)]);
+  }
+  writeFileSync(join(root, 'causal-sales.csv'), toCsv(rows), 'utf8');
+}
+
+console.log('Wrote causal examples to', root);

@@ -538,7 +538,7 @@ class ScenarioTreeBuilder {
 }
 
 // Export modules
-module.exports = {
+export {
     MonteCarloSimulator,
     PredictiveDensity,
     ScenarioTreeBuilder

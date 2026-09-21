@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for Scenario Generator - ForecastLab Phase 4C
 
-import { ScenarioGenerator } from '../../src/counterfactual.js';
+import { ScenarioGenerator } from '../../../src/counterfactual.js';
 import { strict as assert } from 'node:assert';
 
 suite('ScenarioGenerator', () => {
@@ -123,13 +124,11 @@ suite('ScenarioGenerator', () => {
 
   test('should handle missing template gracefully', async () => {
     const generator = new ScenarioGenerator();
-    
-    const consoleWarnSpy = sinon.spy(console, 'warn');
-    
+
     const result = await generator.generateScenarios({}, {
       templates: ['nonexistent_template']
     });
-    
+
     assert.ok(Array.isArray(result));
   });
 

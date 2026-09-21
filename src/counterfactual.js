@@ -429,7 +429,7 @@ class ParameterSweeper {
 }
 
 // Export modules
-module.exports = {
+export {
     CounterfactualEngine,
     ScenarioGenerator,
     ParameterSweeper

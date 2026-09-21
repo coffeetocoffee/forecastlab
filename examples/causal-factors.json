@@ -1,0 +1,22 @@
+{
+  "events": [
+    {
+      "name": "heatwave",
+      "start": "2026-07-12",
+      "duration": 72,
+      "decay": "exponential"
+    },
+    {
+      "name": "price-spike",
+      "start": "2026-07-18T18:00:00",
+      "duration": 6,
+      "decay": "triangular"
+    },
+    {
+      "name": "stadium-event",
+      "start": "2026-07-25",
+      "duration": 48,
+      "decay": "box"
+    }
+  ]
+}

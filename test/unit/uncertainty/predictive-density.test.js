@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for Predictive Density - ForecastLab Phase 4B
 
-import { PredictiveDensity } from '../../src/uncertainty.js';
+import { PredictiveDensity } from '../../../src/uncertainty.js';
 import { strict as assert } from 'node:assert';
 
 suite('PredictiveDensity', () => {

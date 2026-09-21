@@ -1,6 +1,7 @@
+import { test, suite } from 'node:test';
 // Unit Tests for HierarchicalReconciler - ForecastLab Phase 4A
 
-import { HierarchicalReconciler } from '../../src/multiSeries.js';
+import { HierarchicalReconciler } from '../../../src/multiSeries.js';
 import { strict as assert } from 'node:assert';
 
 const VERSION = await import('node:os').then(os => os.platform());

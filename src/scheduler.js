@@ -388,7 +388,7 @@ class SlidingWindow {
 }
 
 // Export modules
-module.exports = {
+export {
     UpdateScheduler,
     EventTriggerSystem,
     AdaptiveWeighting,

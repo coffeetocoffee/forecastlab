@@ -18,6 +18,7 @@
     "./uncertainty.js": "./src/uncertainty.js",
     "./counterfactual.js": "./src/counterfactual.js",
     "./scheduler.js": "./src/scheduler.js",
+    "./causal.js": "./src/causal.js",
     "./visualizations": "./src/visualizations/index.js",
     "./workers": "./src/workers/index.js",
     "./scenarios": "./src/scenarios-index.js"

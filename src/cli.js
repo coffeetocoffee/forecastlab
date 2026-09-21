@@ -58,6 +58,9 @@ import {
 // Phase 5: Plugin System
 import { registry as pluginRegistry } from '../sdk/core.mjs';
 
+// Causal understanding (no machine learning)
+import { cmdCausal } from './commands/causal.js';
+
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = resolve(HERE, '..', 'examples');
@@ -67,6 +70,7 @@ const EXAMPLES = {
   river: { file: 'river-daily.csv', project: 'river.forecast.json', title: 'Daily river level (m)' },
   temp: { file: 'temp-daily.csv', project: 'temp.forecast.json', title: 'Daily mean temperature (C)' },
   'energy-fourier': { file: 'energy-fourier-hourly.csv', project: 'energy-fourier.forecast.json', title: 'Hourly electricity with Fourier features' },
+  causal: { file: 'causal-energy.csv', project: 'causal-factors.json', title: 'Hourly energy market: temperature and price driving demand' },
 };
 
 const VALUE_OPTS = new Set([
@@ -74,6 +78,10 @@ const VALUE_OPTS = new Set([
   'interval', 'method', 'methods', 'test-size', 'json', 'html', 'csv', 'md',
   'out', 'example', 'agg', 'step', 'seasonality', 'port', 'host', 'report',
   'features',
+  // causal understanding
+  'columns', 'variable', 'target', 'change', 'start', 'duration', 'max-lag',
+  'ar-lag', 'significance', 'pre-window', 'post-window', 'event-index',
+  'event-date', 'factors', 'holidays', 'k', 'all',
 ]);
 const BOOL_OPTS = new Set(['help', 'version', 'resample', 'damped', 'open']);
 
@@ -97,7 +105,7 @@ function parseArgs(argv) {
     } else if (a === '-h') opts.help = true;
     else positional.push(a);
   }
-  return { command: positional[0] ?? null, opts };
+  return { command: positional[0] ?? null, opts, action: positional[1] ?? null, positional };
 }
 
 function printTable(headers, rows) {
@@ -108,7 +116,58 @@ function printTable(headers, rows) {
   for (const r of rows) console.log(line(r));
 }
 
-const printHelp = () => {
+const printHelp = (action) => {
+  if (action === 'causal') {
+    console.log(`forecastlab ${VERSION} — causal understanding (classical statistics, no machine learning)
+
+Usage: forecastlab causal <action> [options]
+
+Actions:
+  graph          Discover how variables affect each other, with lag analysis,
+                 confidence scoring and a significance test on every link.
+                 Opens a drag-and-drop graph in the browser with --html: drag
+                 from a node's green handle to another node to test a
+                 hypothesis of your own.
+  what-if        "What if we changed X?" — propagate a change through the
+                 historical impulse response, with uncertainty bounds. Also
+                 reports natural experiments found in the data.
+  factors        Measure the effect of known external events (holidays,
+                 promotions, weather) on a series, and rank them by impact.
+  counterfactual Compare what happened against what would have happened, using
+                 a control group of similar periods and difference-in-differences.
+
+Options:
+  --data <csv>        Input CSV. graph/what-if want a wide CSV (time + one column
+                      per variable); factors/counterfactual want time + one value.
+  --variable <col>    (what-if) the column to change
+  --target <col>      (what-if) the column that responds
+  --change <n>        (what-if) units to add to the variable
+  --start <n>         (what-if) step index of the change (default 0)
+  --duration <n>      (what-if) how long the change persists (default: whole horizon)
+  --horizon <n>       (what-if) steps to simulate (default 24)
+  --max-lag <n>       Furthest lag to scan (default 12)
+  --ar-lag <n>        Autoregressive terms of the target used as control (default 4)
+  --season <n>        Season length; both series are deseasonalized before testing
+  --significance <p>  Threshold for a link to count as significant (default 0.05)
+  --all               (graph) also show links that failed the significance test
+  --event-index <n>   (counterfactual) step where the intervention happened
+  --event-date <iso>  (counterfactual) ... or a date, snapped to the nearest observation
+  --pre-window <n>    (counterfactual) steps before the event to match on (default 12)
+  --post-window <n>   (counterfactual) steps after the event to compare (default 12)
+  --k <n>             (counterfactual) control windows to keep (default 3)
+  --factors <file>    (factors) events JSON or a wide CSV of covariates
+  --holidays <a-b>    (factors) built-in local holiday calendar, e.g. --holidays 2025-2026
+  --html <path>       Write an interactive HTML view
+  --json <path>       Write machine-readable results
+
+Examples:
+  forecastlab causal graph --data examples/causal-energy.csv --html causal.html --season 24
+  forecastlab causal what-if --data examples/causal-energy.csv --variable temperature --target demand --change 5 --html what-if.html
+  forecastlab causal factors --data examples/causal-energy.csv --value demand --factors examples/causal-factors.json --holidays 2026-2026
+  forecastlab causal counterfactual --data examples/causal-sales.csv --event-date 2026-04-01 --html cf.html
+`);
+    return;
+  }
   console.log(`forecastlab ${VERSION} — a local-first forecasting workbench (offline, zero dependencies)
 
 Usage: forecastlab <command> [options]
@@ -126,7 +185,7 @@ Commands:
   methods    Explain every forecasting method in plain language
   demo       Copy a built-in example dataset into a folder
   
-  # Phase 4: Advanced Analytics
+   # Phase 4: Advanced Analytics
   reconcile       Hierarchical forecast reconciliation for multi-level structures
   panel           Compare methods across groups of series (panel data analysis)
   spillover       Detect cross-series influence using VAR models
@@ -135,6 +194,13 @@ Commands:
   what-if         Run counterfactual scenarios ("what would happen if...")
   schedule        Configure automatic model retraining schedules
   update          Trigger model updates based on event detection or schedule
+
+  # Causal understanding (no machine learning)
+  causal graph          Discover lagged relationships with significance tests
+  causal what-if        Simulate an intervention from historical responses
+  causal factors        Measure external events (holidays, promotions, weather)
+  causal counterfactual Actual vs "what would have happened" (difference-in-differences)
+  causal                Show detailed causal help (also: forecastlab help causal)
 
   help       Show this text
 
@@ -176,6 +242,8 @@ Examples:
   forecastlab report --project forecastlab-demo/energy.forecast.json
   forecastlab reproduce --report out/energy-report.json
   forecastlab diff --old out/old-report.json --new out/new-report.json
+  forecastlab causal graph --data examples/causal-energy.csv --html causal.html
+  forecastlab help causal          # causal actions, options, and examples
 `);
 };
 
@@ -447,6 +515,13 @@ function cmdDemo(opts) {
   copyFileSync(join(EXAMPLES_DIR, file), join(outDir, file));
   copyFileSync(join(EXAMPLES_DIR, project), join(outDir, project));
   console.log(`Copied "${id}" example to ${outDir}`);
+  if (id === 'causal') {
+    console.log('Causal analysis on this dataset:');
+    console.log(`  node src/cli.js causal graph --data ${join(basename(outDir), file)} --html causal.html --season 24`);
+    console.log(`  node src/cli.js causal what-if --data ${join(basename(outDir), file)} --variable temperature --target demand --change 5 --html what-if.html`);
+    console.log(`  node src/cli.js causal factors --data ${join(basename(outDir), file)} --value demand --factors ${join(basename(outDir), project)} --holidays 2026-2026`);
+    return;
+  }
   console.log('Next:');
   console.log(`  forecastlab check --project ${join(basename(outDir), project)}`);
   console.log(`  forecastlab report --project ${join(basename(outDir), project)}`);
@@ -1053,14 +1128,14 @@ async function cmdInstallPlugin(opts) {
   console.log('Installation API under development...');
 }
 
-export function main(argv = process.argv.slice(2)) {
-  const { command, opts } = parseArgs(argv);
+export async function main(argv = process.argv.slice(2)) {
+  const { command, opts, action } = parseArgs(argv);
   if (opts.version) {
     console.log(VERSION);
     return;
   }
   if (opts.help || !command || command === 'help') {
-    printHelp();
+    printHelp(action);
     return;
   }
   switch (command) {
@@ -1089,7 +1164,10 @@ export function main(argv = process.argv.slice(2)) {
     // Phase 5: Plugin System Commands
     case 'plugins': await cmdPlugins(opts); break;
     case 'install-plugin': await cmdInstallPlugin(opts); break;
-    
+
+    // Causal understanding
+    case 'causal': cmdCausal({ ...opts, action }); break;
+
     default: throw new Error(`Unknown command "${command}". Run: forecastlab help`);
   }
 }

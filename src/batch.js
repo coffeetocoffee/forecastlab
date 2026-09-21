@@ -2,7 +2,7 @@
 // Process hundreds/thousands of time series efficiently using worker pool and chunked reading.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fourierFeatures, fitGLMForecast } from './models.js';
+import { fitGLMForecast } from './models.js';
 import { fourierFeatures as genFourier } from './utils/fourier.js';
 
 /**

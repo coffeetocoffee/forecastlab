@@ -136,3 +136,28 @@ export {
   AdaptiveWeighting,
   SlidingWindow,
 } from './scheduler.js';
+
+// ==========================================
+// Causal understanding (no machine learning)
+// ==========================================
+
+export {
+  parseWideCsv,
+  betai,
+  tTestPValue,
+  fTestPValue,
+  mean,
+  variance,
+  stdDev,
+  pearson,
+  detrend,
+  ols,
+  fmtP,
+  CausalGraph,
+  naiveBaseline,
+  InterventionSimulator,
+  DECAY_KERNELS,
+  ExternalFactorIntegrator,
+  holidayCalendar,
+  CounterfactualAnalyzer,
+} from './causal.js';

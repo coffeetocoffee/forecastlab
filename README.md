@@ -197,22 +197,6 @@ forecastlab/
 
 ---
 
-## 🎁 Early Adopter Perks
-
-Want to be part of v4.0's launch?
-
-1. ⭐ Star this repo
-2. 📝 Join Discord (link in issues)
-3. 🧪 Test new plugins and models
-4. 💡 Vote on feature priorities
-
-**Beta testers get:**
-- Founder contributor badge
-- Direct line to dev team
-- First access to new features
-
----
-
 ## 📜 License
 
 MIT — free to use, modify, and distribute. See [LICENSE](LICENSE).

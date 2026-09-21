@@ -157,17 +157,6 @@ Every step is documented, reproducible, and makes sense.
 
 ---
 
-## 🤝 Join the Community
-
-We're building **the antidote to black-box AI forecasting**.
-
-- 💬 **GitHub Discussions** - Share ideas and get help
-- 🐛 **Report Issues** - Found a bug? Help us fix it
-- 🚀 **Contribute** - Add models, datasets, or improve docs
-- 📢 **Spread the Word** - Tell others about explainable forecasting
-
----
-
 ## 🎯 Non-Goals (So You Know)
 
 - ❌ **No ML** - We stick to classical statistics

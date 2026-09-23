@@ -1,0 +1,679 @@
+{
+  "id": "snap-1790137528380-iedtrg",
+  "name": "default_final",
+  "timestamp": "2026-09-23T04:25:28.380Z",
+  "dataHash": "3d1aa20d1d178197c3f042890a1f5d432e3aa92e773a6d46c866f0305b884fe2",
+  "metadata": {
+    "purpose": "pipeline_result",
+    "status": "completed",
+    "created_at": "2026-09-23T04:25:28.380Z",
+    "version": 1
+  },
+  "data": {
+    "success": true,
+    "job_id": "job_1790137528356_z3ofra",
+    "series_name": "default",
+    "phases_completed": [
+      "quality_check",
+      "quality_gates",
+      "auto_fix",
+      "correlation"
+    ],
+    "quality_report": {
+      "summary": {
+        "totalIssues": 1,
+        "critical": 0,
+        "warnings": 1,
+        "overallHealth": "66.7",
+        "dataReady": true
+      },
+      "anomalies": {
+        "detectedCount": 60,
+        "confidenceLevels": {
+          "high": 60,
+          "medium": 0,
+          "low": 0
+        },
+        "anomalies": [
+          {
+            "index": 0,
+            "value": 100,
+            "date": "2026-01-01",
+            "isolationScore": 27,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 1,
+            "value": 103.91915741234016,
+            "date": "2026-01-02",
+            "isolationScore": 28.733333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 2,
+            "value": 104.89463956090911,
+            "date": "2026-01-03",
+            "isolationScore": 31.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 3,
+            "value": 102.1994186955878,
+            "date": "2026-01-04",
+            "isolationScore": 30,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 4,
+            "value": 97.87058130441221,
+            "date": "2026-01-05",
+            "isolationScore": 27.7,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 5,
+            "value": 95.17536043909088,
+            "date": "2026-01-06",
+            "isolationScore": 30.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 6,
+            "value": 96.15084258765985,
+            "date": "2026-01-07",
+            "isolationScore": 33,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 7,
+            "value": 100.07,
+            "date": "2026-01-08",
+            "isolationScore": 28.066666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 8,
+            "value": 103.98915741234015,
+            "date": "2026-01-09",
+            "isolationScore": 31.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 9,
+            "value": 104.96463956090912,
+            "date": "2026-01-10",
+            "isolationScore": 31.633333333333333,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 10,
+            "value": 102.26941869558779,
+            "date": "2026-01-11",
+            "isolationScore": 29.6,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 11,
+            "value": 97.94058130441222,
+            "date": "2026-01-12",
+            "isolationScore": 27.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 12,
+            "value": 95.24536043909089,
+            "date": "2026-01-13",
+            "isolationScore": 30.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 13,
+            "value": 96.22084258765985,
+            "date": "2026-01-14",
+            "isolationScore": 30.966666666666665,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 14,
+            "value": 100.14,
+            "date": "2026-01-15",
+            "isolationScore": 26.833333333333332,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 15,
+            "value": 104.05915741234014,
+            "date": "2026-01-16",
+            "isolationScore": 32.1,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 16,
+            "value": 105.03463956090911,
+            "date": "2026-01-17",
+            "isolationScore": 32.6,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 17,
+            "value": 102.33941869558778,
+            "date": "2026-01-18",
+            "isolationScore": 29.566666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 18,
+            "value": 98.01058130441221,
+            "date": "2026-01-19",
+            "isolationScore": 26.9,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 19,
+            "value": 95.31536043909088,
+            "date": "2026-01-20",
+            "isolationScore": 30.966666666666665,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 20,
+            "value": 96.29084258765985,
+            "date": "2026-01-21",
+            "isolationScore": 27.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 21,
+            "value": 100.21,
+            "date": "2026-01-22",
+            "isolationScore": 29.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "extreme_outlier"
+          },
+          {
+            "index": 22,
+            "value": 104.12915741234013,
+            "date": "2026-01-23",
+            "isolationScore": 31.6,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 23,
+            "value": 105.10463956090912,
+            "date": "2026-01-24",
+            "isolationScore": 32.93333333333333,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 24,
+            "value": 102.40941869558779,
+            "date": "2026-01-25",
+            "isolationScore": 28.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 25,
+            "value": 98.08058130441222,
+            "date": "2026-01-26",
+            "isolationScore": 29.033333333333335,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 26,
+            "value": 95.38536043909089,
+            "date": "2026-01-27",
+            "isolationScore": 28.733333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 27,
+            "value": 96.36084258765985,
+            "date": "2026-01-28",
+            "isolationScore": 29.8,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 28,
+            "value": 100.28,
+            "date": "2026-01-29",
+            "isolationScore": 30.133333333333333,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 29,
+            "value": 104.19915741234016,
+            "date": "2026-01-30",
+            "isolationScore": 29.066666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 30,
+            "value": 105.17463956090911,
+            "date": "2026-01-31",
+            "isolationScore": 31.3,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 31,
+            "value": 102.4794186955878,
+            "date": "2026-02-01",
+            "isolationScore": 31.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 32,
+            "value": 98.15058130441221,
+            "date": "2026-02-02",
+            "isolationScore": 27.733333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 33,
+            "value": 95.45536043909088,
+            "date": "2026-02-03",
+            "isolationScore": 28.733333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 34,
+            "value": 96.43084258765987,
+            "date": "2026-02-04",
+            "isolationScore": 29.933333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 35,
+            "value": 100.35,
+            "date": "2026-02-05",
+            "isolationScore": 30,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 36,
+            "value": 104.26915741234015,
+            "date": "2026-02-06",
+            "isolationScore": 32.43333333333333,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 37,
+            "value": 105.24463956090912,
+            "date": "2026-02-07",
+            "isolationScore": 32.43333333333333,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 38,
+            "value": 102.54941869558779,
+            "date": "2026-02-08",
+            "isolationScore": 30.7,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 39,
+            "value": 98.22058130441222,
+            "date": "2026-02-09",
+            "isolationScore": 29.933333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 40,
+            "value": 95.52536043909089,
+            "date": "2026-02-10",
+            "isolationScore": 31.933333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 41,
+            "value": 96.50084258765985,
+            "date": "2026-02-11",
+            "isolationScore": 29.9,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 42,
+            "value": 100.41999999999999,
+            "date": "2026-02-12",
+            "isolationScore": 31,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "extreme_outlier"
+          },
+          {
+            "index": 43,
+            "value": 104.33915741234016,
+            "date": "2026-02-13",
+            "isolationScore": 32.233333333333334,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 44,
+            "value": 105.31463956090913,
+            "date": "2026-02-14",
+            "isolationScore": 33,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 45,
+            "value": 102.6194186955878,
+            "date": "2026-02-15",
+            "isolationScore": 30,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 46,
+            "value": 98.29058130441221,
+            "date": "2026-02-16",
+            "isolationScore": 26.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 47,
+            "value": 95.59536043909088,
+            "date": "2026-02-17",
+            "isolationScore": 30.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 48,
+            "value": 96.57084258765985,
+            "date": "2026-02-18",
+            "isolationScore": 29.9,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 49,
+            "value": 100.48999999999998,
+            "date": "2026-02-19",
+            "isolationScore": 27.766666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "extreme_outlier"
+          },
+          {
+            "index": 50,
+            "value": 104.40915741234015,
+            "date": "2026-02-20",
+            "isolationScore": 31,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 51,
+            "value": 105.38463956090912,
+            "date": "2026-02-21",
+            "isolationScore": 33,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 52,
+            "value": 102.68941869558776,
+            "date": "2026-02-22",
+            "isolationScore": 31.5,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 53,
+            "value": 98.36058130441222,
+            "date": "2026-02-23",
+            "isolationScore": 31.9,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 54,
+            "value": 95.66536043909089,
+            "date": "2026-02-24",
+            "isolationScore": 30.866666666666667,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 55,
+            "value": 96.64084258765985,
+            "date": "2026-02-25",
+            "isolationScore": 27.833333333333332,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 56,
+            "value": 100.55999999999999,
+            "date": "2026-02-26",
+            "isolationScore": 29.566666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 57,
+            "value": 104.47915741234013,
+            "date": "2026-02-27",
+            "isolationScore": 31.466666666666665,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 58,
+            "value": 105.45463956090911,
+            "date": "2026-02-28",
+            "isolationScore": 33,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          },
+          {
+            "index": 59,
+            "value": 102.7594186955878,
+            "date": "2026-03-01",
+            "isolationScore": 30.566666666666666,
+            "confidence": 0.95,
+            "method": "Isolation Forest",
+            "patternType": "trend_reversal"
+          }
+        ],
+        "methodsUsed": [
+          "Z-Score",
+          "IQR",
+          "Isolation Forest"
+        ]
+      },
+      "missingData": {
+        "totalMissing": 0,
+        "gapCount": 0,
+        "gaps": [],
+        "coveragePercent": "100.00"
+      },
+      "trendAnalysis": {
+        "shiftCount": 0,
+        "significantShifts": [],
+        "detectedAt": [],
+        "hasMajorShift": false
+      },
+      "seasonalityAnalysis": {
+        "breaksDetected": false,
+        "breakScores": [],
+        "seasonalStability": "stable"
+      },
+      "errorPatterns": {
+        "totalErrors": 0,
+        "errors": [],
+        "humanManipulationLikely": false
+      },
+      "outlierAnalysis": {
+        "clusterCount": 0,
+        "clusters": [],
+        "affectedPoints": 0,
+        "potentialBatchError": false
+      },
+      "stationarityTest": {
+        "isStationary": true,
+        "fStatistic": "1.351",
+        "recommendation": "Use level-based models"
+      },
+      "recommendations": [
+        {
+          "category": "outlier_handling",
+          "priority": "high",
+          "title": "Address Detected Anomalies",
+          "description": "60 anomalies detected (60 high confidence). Consider:",
+          "options": [
+            {
+              "id": "remove",
+              "name": "Exclude from Training",
+              "useCase": "If caused by measurement error"
+            },
+            {
+              "id": "winsorize",
+              "name": "Winsorize Values",
+              "useCase": "Keep but reduce extreme influence"
+            },
+            {
+              "id": "investigate",
+              "name": "Manual Review First",
+              "useCase": "Before deciding treatment"
+            }
+          ]
+        }
+      ],
+      "provenanceId": "pq-1790137528380-ty8jvw"
+    },
+    "timing": {
+      "total_ms": 21,
+      "quality_check_ms": null,
+      "fix_ms": null
+    },
+    "recommendations": [
+      {
+        "category": "outlier_handling",
+        "priority": "high",
+        "title": "Address Detected Anomalies",
+        "description": "60 anomalies detected (60 high confidence). Consider:",
+        "options": [
+          {
+            "id": "remove",
+            "name": "Exclude from Training",
+            "useCase": "If caused by measurement error"
+          },
+          {
+            "id": "winsorize",
+            "name": "Winsorize Values",
+            "useCase": "Keep but reduce extreme influence"
+          },
+          {
+            "id": "investigate",
+            "name": "Manual Review First",
+            "useCase": "Before deciding treatment"
+          }
+        ]
+      }
+    ],
+    "next_steps": [
+      "Address 1 high-priority issues first"
+    ]
+  }
+}

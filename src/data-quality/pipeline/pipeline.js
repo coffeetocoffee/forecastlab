@@ -25,9 +25,9 @@ export class ForecastingPipeline {
     
     // Quality gates configuration
     this.gates = {
-      minHealthScore: options.minHealthScore || 70,
-      maxCriticalIssues: options.maxCriticalIssues || 2,
-      maxMissingPercent: options.maxMissingPercent || 5,
+      minHealthScore: options.minHealthScore ?? 70,
+      maxCriticalIssues: options.maxCriticalIssues ?? 2,
+      maxMissingPercent: options.maxMissingPercent ?? 5,
       autoFixEnabled: options.autoFixEnabled !== false
     };
 
@@ -316,44 +316,34 @@ export class ForecastingPipeline {
     const maxConcurrent = 3;
     const activeQueue = [];
     const waitingQueue = [...queuedJobs];
+    const results = new Map();
 
-    return new Promise((resolve, reject) => {
-      const processNext = async () => {
+    return new Promise((resolve) => {
+      const processNext = () => {
         while (waitingQueue.length > 0 && activeQueue.length < maxConcurrent) {
           const job = waitingQueue.shift();
-          const result = this.run(job.data, job.options);
-          
-          activeQueue.push({
-            id: job.id,
-            promise: result.then(r => ({ success: true, result: r }))
-                             .catch(e => ({ success: false, error: e.message }))
-          });
+          const promise = this.run(job.data, job.options)
+            .then(r => ({ success: true, result: r }))
+            .catch(e => ({ success: false, error: e.message }))
+            .then(outcome => {
+              results.set(job.id, outcome);
+              const index = activeQueue.indexOf(job.id);
+              if (index > -1) activeQueue.splice(index, 1);
+              processNext();
+              return outcome;
+            });
+
+          activeQueue.push(job.id);
 
           console.log(`▶️  Started job ${job.id} (${activeQueue.length}/${maxConcurrent} active)`);
         }
 
         if (activeQueue.length === 0 && waitingQueue.length === 0) {
-          resolve();
+          resolve(results);
         }
       };
 
-      // Process jobs
       processNext();
-
-      // Monitor completion
-      const monitorCompletion = () => {
-        const completed = activeQueue.filter(j => j.promise.state === 'fulfilled' || j.promise.state === 'rejected');
-        completed.forEach(j => {
-          const index = activeQueue.indexOf(j);
-          if (index > -1) activeQueue.splice(index, 1);
-        });
-
-        if (completed.length > 0) {
-          processNext();
-        }
-      };
-
-      setTimeout(monitorCompletion, 100);
     });
   }
 

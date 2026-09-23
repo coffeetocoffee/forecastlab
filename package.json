@@ -22,7 +22,15 @@
     "./streaming": "./src/streaming/index.js",
     "./visualizations": "./src/visualizations/index.js",
     "./workers": "./src/workers/index.js",
-    "./scenarios": "./src/scenarios-index.js"
+    "./scenarios": "./src/scenarios-index.js",
+    "./data-quality": "./src/data-quality/index.js",
+    "./causal": "./src/causal.js",
+    "./causal/math": "./src/causal/math.js",
+    "./causal/csv-parse": "./src/causal/csv-parse.js",
+    "./causal/causal-graph": "./src/causal/causal-graph.js",
+    "./causal/intervention": "./src/causal/intervention.js",
+    "./causal/factors": "./src/causal/factors.js",
+    "./causal/counterfactual": "./src/causal/counterfactual.js"
   },
   "files": [
     "src",

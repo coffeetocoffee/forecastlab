@@ -7,7 +7,7 @@
  * - File system or database persistence (configurable)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 
 export class SnapshotStore {
@@ -184,10 +184,18 @@ export class SnapshotStore {
    * Hash data for integrity checking
    */
   async hashData(data) {
-    const jsonString = JSON.stringify(data.sort((a, b) => 
+    // Snapshots may hold non-array payloads (e.g. pipeline results); sort only series data
+    if (!Array.isArray(data)) {
+      return this.hashJson(JSON.stringify(data));
+    }
+    const jsonString = JSON.stringify([...data].sort((a, b) => 
       (a.date || '').localeCompare(b.date || '')
     ));
     
+    return this.hashJson(jsonString);
+  }
+
+  async hashJson(jsonString) {
     const encoder = new TextEncoder();
     const uint8Array = encoder.encode(jsonString);
     const hashBuffer = await crypto.subtle.digest('SHA-256', uint8Array);
@@ -205,7 +213,7 @@ export class SnapshotStore {
       
       // Ensure directory exists
       if (!existsSync(this.defaultPath)) {
-        require('fs').mkdirSync(this.defaultPath, { recursive: true });
+        mkdirSync(this.defaultPath, { recursive: true });
       }
       
       writeFileSync(filePath, JSON.stringify(snapshot, null, 2));
@@ -230,7 +238,7 @@ export class SnapshotStore {
         return 0;
       }
       
-      const files = require('fs').readdirSync(this.defaultPath);
+      const files = readdirSync(this.defaultPath);
       let loadedCount = 0;
       
       for (const file of files) {

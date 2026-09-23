@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// forecastlab CLI: init, check, compare, forecast, report, methods, demo, reproduce, diff.
-// Zero dependencies; human-readable stdout, machine-readable --json/--html files.
+// forecastlab CLI: init, check, compare, forecast, report, methods, demo, help.
+// Streaming/serve commands live in commands/streaming.js, report utilities in
+// commands/reports.js, advanced analytics in commands/advanced.js, plugins in
+// commands/plugins.js. Zero dependencies; human-readable stdout,
+// machine-readable --json/--html files.
 
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
+import { mkdirSync, copyFileSync } from 'node:fs';
 import { resolve, dirname, basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -25,51 +28,32 @@ import {
   defaultProject,
   writeProjectFile,
   resolveInput,
-  versionSatisfies,
   generateFeatures,
   parseFeatureConfig,
-  batchForecast,
 } from './index.js';
-import { createServer, openBrowser } from './serve.js';
-
-// Phase 4 imports
-import { 
-  HierarchicalReconciler, 
-  PanelAnalyzer, 
-  VARModel, 
-  FactorExtractor 
-} from './multiSeries.js';
-import { 
-  MonteCarloSimulator, 
-  PredictiveDensity, 
-  ScenarioTreeBuilder 
-} from './uncertainty.js';
-import { 
-  CounterfactualEngine, 
-  ScenarioGenerator, 
-  ParameterSweeper 
-} from './counterfactual.js';
-import { 
-  UpdateScheduler, 
-  EventTriggerSystem,
-  AdaptiveWeighting,
-  SlidingWindow 
-} from './scheduler.js';
-
-// Phase 5: Plugin System
-import { registry as pluginRegistry } from '../sdk/core.mjs';
 
 // Causal understanding (no machine learning)
 import { cmdCausal } from './commands/causal.js';
-// Streaming: continuous forecasting alongside batch mode
+// serve + stream
+import { cmdServe, cmdStream } from './commands/streaming.js';
+// reproduce, diff, batch
+import { cmdReproduce, cmdDiff, cmdBatch } from './commands/reports.js';
+// Phase 4 advanced analytics
 import {
-  StreamingEngine,
-  FileWatchConnector,
-  WebhookConnector,
-  WebSocketFeedConnector,
-} from './streaming/index.js';
+  cmdReconcile,
+  cmdPanel,
+  cmdSpillover,
+  cmdFactors,
+  cmdUncertainty,
+  cmdWhatIf,
+  cmdSchedule,
+  cmdUpdate,
+} from './commands/advanced.js';
+// Phase 5 plugins
+import { cmdPlugins, cmdInstallPlugin } from './commands/plugins.js';
+// Shared helpers
+import { VERSION, writeJson } from './cli-shared.js';
 
-const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = resolve(HERE, '..', 'examples');
 
@@ -201,7 +185,7 @@ Commands:
   serve      Local browser workbench over the same engine (live settings)
   methods    Explain every forecasting method in plain language
   demo       Copy a built-in example dataset into a folder
-  
+
    # Phase 4: Advanced Analytics
   reconcile       Hierarchical forecast reconciliation for multi-level structures
   panel           Compare methods across groups of series (panel data analysis)
@@ -270,26 +254,12 @@ Examples:
 `);
 };
 
-function writeJson(path, obj) {
-  mkdirSync(dirname(resolve(path)), { recursive: true });
-  writeFileSync(path, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-}
-
-function toPort(v) {
-  if (v === undefined || v === null || v === '') return 0;
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 0 || n > 65535) {
-    throw new Error('--port must be an integer between 0 and 65535');
-  }
-  return n;
-}
-
 function cmdInit(opts) {
   if (!opts.data) throw new Error('init needs --data <file.csv>');
   const dataPath = resolve(process.cwd(), opts.data);
   const { text } = loadCsvFile(dataPath);
   const parsed = parseCsv(text, { timeColumn: opts.time, valueColumn: opts.value });
-  
+
   // Parse features if provided
   let featureConfig = null;
   if (opts.features) {
@@ -302,7 +272,7 @@ function cmdInit(opts) {
       throw new Error('--features JSON did not configure any features (expected e.g. {"fourier":{"seasonLengths":[24],"harmonics":2}})');
     }
   }
-  
+
   const project = {
     ...defaultProject(opts.name ?? basename(dataPath, '.csv'), basename(dataPath)),
     data: basename(dataPath),
@@ -353,10 +323,10 @@ function cmdCheck(opts) {
 
 function runBacktest(input, opts) {
   const testSize = input.config.testSize ?? undefined;
-  
+
   // Prepare features for GLM if needed
   const featuresConfig = input.config.features ? generateFeatures(input) : null;
-  
+
   return backtest(input.values, {
     seasonLength: input.config.seasonLength,
     interval: input.config.interval,
@@ -397,10 +367,10 @@ function pickMethod(input, opts) {
 
 function cmdForecast(opts) {
   const input = resolveInput(opts);
-  
+
   // Generate features if configured
   const featuresConfig = input.config.features ? generateFeatures(input) : null;
-  
+
   const { methodId } = pickMethod(input, opts);
   const f = fit(input.values, methodId, {
     horizon: input.config.horizon,
@@ -443,10 +413,10 @@ function cmdForecast(opts) {
 
 function cmdReport(opts) {
   const input = resolveInput(opts);
-  
+
   // Generate features if configured
   const featuresConfig = input.config.features ? generateFeatures(input) : null;
-  
+
   const methods = applicableMethods(input.values.length, input.config.seasonLength);
   const bt = methods.length > 0
     ? backtest(input.values, {
@@ -555,779 +525,6 @@ function cmdDemo(opts) {
   console.log(`  node ../src/cli.js report --html report.html`);
 }
 
-function cmdServe(opts) {
-  const port = toPort(opts.port);
-  const host = opts.host ?? '127.0.0.1';
-  let streaming = null;
-  if (opts.feed) {
-    const input = resolveInput(opts);
-    const cfg = input.config;
-    const engine = new StreamingEngine({
-      seasonLength: cfg.seasonLength,
-      horizon: cfg.horizon,
-      interval: cfg.interval,
-      method: cfg.method ?? 'auto',
-      damped: cfg.damped ?? false,
-      seasonality: cfg.seasonality ?? 'additive',
-    });
-    engine.addConnector(buildFeedConnector(opts.feed, {
-      seriesId: cfg.name,
-      timeColumn: cfg.timeColumn,
-      valueColumn: cfg.valueColumn,
-      fromStart: true,
-    }));
-    engine.start().catch((e) => console.error(`Streaming engine failed to start: ${e.message}`));
-    streaming = engine;
-  }
-  const server = createServer({ defaults: opts, streaming });
-  server.on('error', (e) => {
-    console.error(`Error: ${e.message}`);
-    process.exit(1);
-  });
-  server.listen(port, host, () => {
-    const addr = server.address();
-    const url = `http://${addr.address}:${addr.port}/`;
-    console.log(`ForecastLab workbench: ${url}`);
-    if (host !== '127.0.0.1' && host !== 'localhost') {
-      console.log('Warning: bound outside the loopback interface — the workbench is reachable from your network.');
-    }
-    console.log('Same engine as the CLI; every request re-reads your file. Press Ctrl+C to stop.');
-    if (opts.open) openBrowser(url);
-  });
-}
-
-/**
- * Stream command: continuous forecasting alongside batch mode.
- *   forecastlab stream --project x.forecast.json --feed file:data.csv
- *   forecastlab stream --project x.forecast.json --feed webhook:8081 --once
- *   forecastlab stream replay --events events.json --project x.forecast.json
- */
-async function cmdStream(opts) {
-  if (opts._ === 'replay' || opts.replay) return cmdStreamReplay(opts);
-  const input = resolveInput(opts);
-  const cfg = input.config;
-
-  const rules = [];
-  if (opts.alertAbove !== undefined) {
-    rules.push({ id: 'cli-above', kind: 'threshold', field: 'value', op: 'gt', level: Number(opts.alertAbove), webhook: opts.webhook ?? null, message: `value above ${opts.alertAbove}` });
-  }
-  if (opts.alertBelow !== undefined) {
-    rules.push({ id: 'cli-below', kind: 'threshold', field: 'value', op: 'lt', level: Number(opts.alertBelow), webhook: opts.webhook ?? null, message: `value below ${opts.alertBelow}` });
-  }
-  // Always watch for drift so auto-recommissioning is visible.
-  rules.push({ id: 'cli-drift', kind: 'drift', webhook: opts.webhook ?? null });
-
-  const engine = new StreamingEngine({
-    seasonLength: cfg.seasonLength,
-    horizon: cfg.horizon,
-    interval: cfg.interval,
-    method: cfg.method ?? 'auto',
-    methods: cfg.methods ?? null,
-    damped: cfg.damped ?? false,
-    seasonality: cfg.seasonality ?? 'additive',
-    rules,
-  });
-
-  const feedSpec = opts.feed ?? `file:${input.dataPath}`;
-  const connector = buildFeedConnector(feedSpec, {
-    seriesId: cfg.name,
-    timeColumn: cfg.timeColumn,
-    valueColumn: cfg.valueColumn,
-    fromStart: Boolean(opts.once),
-  });
-  engine.addConnector(connector);
-
-  engine.hub.subscribe((event) => {
-    if (event.type === 'update') {
-      console.log(JSON.stringify({
-        series: event.seriesId,
-        t: event.point.iso,
-        value: event.point.value,
-        recomputed: event.recomputed,
-        reason: event.reason,
-        method: event.method,
-        alerts: event.alerts,
-      }));
-    } else if (event.type === 'alert') {
-      console.log(JSON.stringify({ alert: event.alert }));
-    }
-  });
-
-  await engine.start();
-  console.log(`Streaming "${cfg.name}" from ${feedSpec} (mode: stream, Ctrl+C to stop)`);
-
-  // Seed the baseline from the file so fresh starts forecast with full context.
-  // Later rows arrive as live events; timestamp dedupe makes overlap harmless.
-  if (!opts.once && typeof connector.readHistory === 'function') {
-    try {
-      const history = connector.readHistory();
-      const seeded = await engine.seed(cfg.name, history);
-      console.log(JSON.stringify({ seeded: history.length, method: seeded.result?.method ?? null }));
-    } catch (e) {
-      console.log(JSON.stringify({ seedWarning: e.message }));
-    }
-  }
-
-  if (opts.once) {
-    const drained = await engine.drain(30000);
-    await engine.stop();
-    const summary = { drained, status: engine.status(), snapshots: engine.snapshot() };
-    if (opts.json) {
-      writeJson(opts.json, summary);
-      console.log(`Wrote ${resolve(opts.json)}`);
-    } else {
-      console.log(JSON.stringify(summary.status, null, 2));
-    }
-    return;
-  }
-
-  await new Promise((resolve) => {
-    const shutdown = async () => {
-      await engine.stop();
-      const summary = { status: engine.status() };
-      if (opts.json) {
-        writeJson(opts.json, { ...summary, snapshots: engine.snapshot() });
-        console.log(`Wrote ${resolve(opts.json)}`);
-      } else {
-        console.log(JSON.stringify(summary.status, null, 2));
-      }
-      resolve();
-    };
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
-  });
-}
-
-function buildFeedConnector(spec, defaults) {
-  const idx = spec.indexOf(':');
-  const kind = idx === -1 ? 'file' : spec.slice(0, idx);
-  const rest = idx === -1 ? spec : spec.slice(idx + 1);
-  if (kind === 'file') {
-    return new FileWatchConnector({ path: resolve(process.cwd(), rest), seriesId: defaults.seriesId, timeColumn: defaults.timeColumn, valueColumn: defaults.valueColumn, fromStart: defaults.fromStart });
-  }
-  if (kind === 'webhook') {
-    return new WebhookConnector({ port: Number(rest) || 0, seriesId: defaults.seriesId });
-  }
-  if (kind === 'ws' || kind === 'websocket') {
-    return new WebSocketFeedConnector({ url: rest, seriesId: defaults.seriesId });
-  }
-  throw new Error(`Unknown feed "${kind}". Use file:<path> | webhook:<port> | ws:<url>`);
-}
-
-/** Replay recorded events to answer "what would have happened". */
-async function cmdStreamReplay(opts) {
-  if (!opts.replay) throw new Error('replay needs --replay <events.json>');
-  const eventsPath = resolve(process.cwd(), opts.replay);
-  let events;
-  try {
-    events = JSON.parse(readFileSync(eventsPath, 'utf8'));
-  } catch (e) {
-    throw new Error(`Cannot read events file "${eventsPath}": ${e.message}`);
-  }
-  const rows = Array.isArray(events) ? events : events.events ?? [];
-  // The subcommand word ('replay') lands in opts.project via positional mapping; ignore it.
-  const projectPath = opts.project && opts.project !== 'replay' ? opts.project : null;
-  const input = projectPath ? resolveInput({ ...opts, project: projectPath }) : null;
-  const cfg = input?.config ?? {};
-  const engine = new StreamingEngine({
-    seasonLength: cfg.seasonLength ?? null,
-    horizon: cfg.horizon ?? 24,
-    interval: cfg.interval ?? 80,
-    method: cfg.method ?? 'auto',
-  });
-  const out = await engine.replay(rows, { seriesId: cfg.name });
-  const summary = { processed: out.processed, snapshots: out.snapshots };
-  if (opts.json) {
-    writeJson(opts.json, summary);
-    console.log(`Wrote ${resolve(opts.json)}`);
-  } else {
-    for (const s of summary.snapshots) {
-      console.log(`${s.seriesId}: ${s.points} points, method=${s.result?.method ?? 'none'}, refreshes=${s.refreshCount}`);
-    }
-  }
-}
-
-/** Reproduce command: re-run analysis from a report and validate */
-function cmdReproduce(opts) {
-  if (!opts.report) throw new Error('reproduce needs --report <report.json>');
-  
-  const reportPath = resolve(process.cwd(), opts.report);
-  let report;
-  try {
-    report = JSON.parse(readFileSync(reportPath, 'utf8'));
-  } catch (e) {
-    throw new Error(`Cannot read report file "${reportPath}": ${e.message}`);
-  }
-  
-  // Validate report structure
-  if (!report.tool || !report.tool.name || !report.tool.version) {
-    throw new Error('Invalid report: missing tool metadata');
-  }
-  if (!report.dataset || !report.dataset.file) {
-    throw new Error('Invalid report: missing dataset reference');
-  }
-  if (!report.command) {
-    throw new Error('Invalid report: missing original command');
-  }
-  if (!report.dataset.hash) {
-    throw new Error('Invalid report: missing data hash (not reproducible)');
-  }
-  
-  // Optional: Provide project file for additional config like seasonLength
-  let projectConfig = {};
-  if (opts.project) {
-    const projPath = resolve(process.cwd(), opts.project);
-    projectConfig = JSON.parse(readFileSync(projPath, 'utf8'));
-  }
-  
-  // Find the data file - check relative to report location first, then cwd
-  let dataRel = report.dataset.file;
-  let dataPath = resolve(dirname(reportPath), dataRel);
-  
-  // Try current working directory if not found
-  if (!existsSync(dataPath)) {
-    dataPath = resolve(process.cwd(), dataRel);
-  }
-  
-  // If still not found, check examples dir
-  const EXAMPLES_DIR = resolve(dirname(reportPath), '..', 'examples');
-  const altDataPath = resolve(EXAMPLES_DIR, dataRel);
-  if (!existsSync(dataPath) && existsSync(altDataPath)) {
-    console.log(`Using data from examples directory: ${altDataPath}`);
-    dataPath = altDataPath;
-  }
-  
-  // Reload CSV and verify hash
-  const { text, hash: actualHash } = loadCsvFile(dataPath);
-  const parsed = parseCsv(text, {
-    timeColumn: report.dataset.timeColumn,
-    valueColumn: report.dataset.valueColumn,
-  });
-  
-  if (actualHash !== report.dataset.hash) {
-    console.error('ERROR: Data file hash mismatch!');
-    console.error(`  Expected: ${report.dataset.hash}`);
-    console.error(`  Actual:   ${actualHash}`);
-    console.error('The data file has been modified since the original report was generated.');
-    process.exit(1);
-  }
-  
-  console.log(`✓ Data integrity verified (hash matches)`);
-  
-  const TOLERANCE = 1e-10;
-  
-  // Re-run the forecast using report settings
-  const config = {
-    ...report.dataset,
-    seasonLength: opts.season ?? projectConfig.seasonLength ?? report.backtest?.seasonLength,
-    interval: opts.interval ?? projectConfig.interval ?? 80,
-    horizon: opts.horizon ?? projectConfig.horizon ?? report.forecast?.horizon,
-    damped: opts.damped ?? projectConfig.damped ?? false,
-    seasonality: opts.seasonality ?? projectConfig.seasonality ?? 'additive',
-  };
-  
-  const values = parsed.points.map((p) => p.value);
-  
-  // Backtest if present
-  let backtestResults = null;
-  if (report.backtest) {
-    const btOpts = {
-      seasonLength: config.seasonLength ?? report.backtest.seasonLength,
-      interval: config.interval,
-      testSize: report.backtest.testSize,
-    };
-    
-    try {
-      backtestResults = backtest(values, btOpts);
-      console.log(`✓ Backtest reproducible (${backtestResults.results.length} methods tested)`);
-      
-      // Compare RMSE values
-      const oldBest = report.backtest.best;
-      const newBest = backtestResults.best;
-      if (oldBest !== newBest) {
-        console.error(`⚠ WARNING: Best method changed!`);
-        console.error(`  Original: ${oldBest}`);
-        console.error(`  Re-run:   ${newBest}`);
-      }
-      
-      // Check metrics match within tolerance
-      let metricsMatch = true;
-      for (const oldR of report.backtest.results || []) {
-        const newR = backtestResults.results?.find((r) => r.method === oldR.method);
-        if (!newR) {
-          metricsMatch = false;
-          break;
-        }
-        if (Math.abs(oldR.rmse - newR.rmse) > TOLERANCE) {
-          metricsMatch = false;
-          console.error(`⚠ Metric mismatch for ${oldR.method}: RMSE ${oldR.rmse} → ${newR.rmse}`);
-        }
-      }
-      if (metricsMatch && report.backtest.results?.length > 0) {
-        console.log(`✓ Metrics match original report`);
-      }
-    } catch (e) {
-      console.warn(`⚠ Could not re-run backtest: ${e.message}`);
-    }
-  }
-  
-  // Re-forecast if present
-  let forecastMatch = true;
-  if (report.forecast) {
-    try {
-      const fOpts = {
-        horizon: opts.horizon ?? projectConfig.horizon ?? report.forecast.horizon,
-        seasonLength: config.seasonLength,
-        interval: config.interval,
-        damped: report.forecast.damped || false,
-        seasonality: report.forecast.seasonality || 'additive',
-      };
-      
-      const f = fit(values, report.forecast.method, fOpts);
-      const times = futureTimes(parsed.points, config.stepMs, f.horizon);
-      
-      // Compare forecast points
-      const fore = report.forecast.steps || [];
-      if (fore.length === f.point.length) {
-        let ptsMatch = true;
-        for (let i = 0; i < fore.length; i++) {
-          if (Math.abs(fore[i].point - f.point[i]) > TOLERANCE) {
-            ptsMatch = false;
-            forecastMatch = false;
-          }
-          if (Math.abs(fore[i].lower - f.lower[i]) > TOLERANCE) {
-            forecastMatch = false;
-          }
-          if (Math.abs(fore[i].upper - f.upper[i]) > TOLERANCE) {
-            forecastMatch = false;
-          }
-        }
-        if (ptsMatch) {
-          console.log(`✓ Forecast matches original report`);
-        } else {
-          console.error(`⚠ Forecast values differ from original`);
-        }
-      } else {
-        forecastMatch = false;
-        console.error(`⚠ Forecast length changed: ${fore.length} → ${f.point.length}`);
-      }
-    } catch (e) {
-      console.error(`✗ Forecast re-run failed: ${e.message}`);
-    }
-  }
-  
-  // Version check
-  const expectedVersion = report.tool.version;
-  if (expectedVersion !== VERSION) {
-    console.warn(`⚠ Version mismatch: report was generated with ${expectedVersion}, this is ${VERSION}`);
-  } else {
-    console.log(`✓ Tool version matches (${VERSION})`);
-  }
-  
-  console.log('\n✅ Reproducibility validation passed');
-  console.log(`Report was generated by: ${report.command}`);
-  console.log(`Generated at: ${report.generatedAt}`);
-}
-
-/** Diff command: compare two reports side by side */
-function cmdDiff(opts) {
-  if (!opts.old || !opts.new) throw new Error('diff needs --old <report1.json> --new <report2.json>');
-  
-  const oldPath = resolve(process.cwd(), opts.old);
-  const newPath = resolve(process.cwd(), opts.new);
-  
-  let oldReport, newReport;
-  try {
-    oldReport = JSON.parse(readFileSync(oldPath, 'utf8'));
-    newReport = JSON.parse(readFileSync(newPath, 'utf8'));
-  } catch (e) {
-    throw new Error(`Cannot read report file: ${e.message}`);
-  }
-  
-  console.log('=== Report Comparison ===\n');
-  
-  // Dataset comparison
-  console.log('Dataset:');
-  console.log(`  Old: ${oldReport.dataset?.file || 'N/A'} (hash: ${oldReport.dataset?.hash?.slice(0, 8) || 'N/A'}...)`);
-  console.log(`  New: ${newReport.dataset?.file || 'N/A'} (hash: ${newReport.dataset?.hash?.slice(0, 8) || 'N/A'}...)`);
-  if (oldReport.dataset?.hash !== newReport.dataset?.hash) {
-    console.log('  ⚠ Data files differ');
-  } else {
-    console.log('  ✓ Data files are identical');
-  }
-  console.log();
-  
-  // Backtest comparison
-  if (oldReport.backtest && newReport.backtest) {
-    console.log('Backtest Results:');
-    const oldMap = new Map(oldReport.backtest.results.map((r) => [r.method, r]));
-    const newMap = new Map(newReport.backtest.results.map((r) => [r.method, r]));
-    
-    for (const [method, oldR] of oldMap) {
-      const newR = newMap.get(method);
-      if (newR) {
-        const rmseDelta = newR.rmse - oldR.rmse;
-        const status = Math.abs(rmseDelta) < 1e-10 ? '✓' : '⚠';
-        console.log(`  ${status} ${method}: RMSE ${fmtNum(oldR.rmse)} → ${fmtNum(newR.rmse)} (${rmseDelta >= 0 ? '+' : ''}${fmtNum(rmseDelta)})`);
-      } else {
-        console.log(`  - ${method}: removed`);
-      }
-    }
-    for (const [method, newR] of newMap) {
-      if (!oldMap.has(method)) {
-        console.log(`  + ${method}: RMSE ${fmtNum(newR.rmse)} (new)`);
-      }
-    }
-    console.log();
-  }
-  
-  // Forecast comparison
-  if (oldReport.forecast && newReport.forecast) {
-    console.log('Forecast Settings:');
-    const of = oldReport.forecast;
-    const nf = newReport.forecast;
-    console.log(`  Method: ${of.method} → ${nf.method}`);
-    console.log(`  Horizon: ${of.horizon} → ${nf.horizon}`);
-    console.log(`  Interval: ${of.interval}% → ${nf.interval}%`);
-    
-    if (of.steps && nf.steps && of.steps.length > 0 && nf.steps.length > 0) {
-      const firstOld = of.steps[0];
-      const firstNew = nf.steps[0];
-      const pointDelta = firstNew.point - firstOld.point;
-      console.log(`  First forecast: ${fmtNum(firstOld.point)} → ${fmtNum(firstNew.point)} (${pointDelta >= 0 ? '+' : ''}${fmtNum(pointDelta)})`);
-    }
-    console.log();
-  }
-  
-  // Metadata
-  console.log('Metadata:');
-  console.log(`  Old command: ${oldReport.command || 'N/A'}`);
-  console.log(`  New command: ${newReport.command || 'N/A'}`);
-  console.log(`  Generated: ${oldReport.generatedAt || 'N/A'} → ${newReport.generatedAt || 'N/A'}`);
-}
-
-/**
- * Batch processing command: process multiple CSV files at once
- */
-async function cmdBatch(opts) {
-  if (!opts.batch) throw new Error('batch needs --batch <directory>');
-  
-  const batchDir = resolve(process.cwd(), opts.batch);
-  
-  // Find all CSV files
-  const { readdirSync, statSync } = await import('node:fs');
-  const csvFiles = readdirSync(batchDir)
-    .filter(f => f.endsWith('.csv'))
-    .map(f => join(batchDir, f));
-  
-  if (csvFiles.length === 0) {
-    throw new Error(`No CSV files found in ${batchDir}`);
-  }
-  
-  console.log(`Found ${csvFiles.length} CSV files in ${batchDir}`);
-  
-  // Parse methods
-  const methods = opts.methods
-    ? String(opts.methods).split(',').map(s => s.trim()).filter(Boolean)
-    : ['glm'];
-  
-  // Parse fourier config
-  let fourierConfig = null;
-  if (opts.fourierConfig || opts.fourier) {
-    try {
-      fourierConfig = JSON.parse(opts.fourierConfig || opts.fourier);
-    } catch (e) {
-      throw new Error(`Invalid --fourier-config JSON: ${e.message}`);
-    }
-  }
-  
-  // Run batch processing
-  console.log('\nStarting batch processing...');
-  const result = await batchForecast({
-    seriesFiles: csvFiles,
-    fourierConfig,
-    methods,
-    maxWorkers: 4,
-  });
-  
-  console.log(`\n✅ Batch complete!`);
-  console.log(`Processed: ${result.results.length}/${csvFiles.length}`);
-  if (result.errors.length > 0) {
-    console.log(`Errors: ${result.errors.length}`);
-    for (const err of result.errors.slice(0, 5)) {
-      console.log(`  - ${err.file}: ${err.error}`);
-    }
-  }
-  
-  // Save results to JSON
-  if (opts.json) {
-    writeJson(opts.json, {
-      summary: {
-        totalFiles: csvFiles.length,
-        successful: result.results.length,
-        failed: result.errors.length,
-      },
-      results: result.results,
-      errors: result.errors,
-    });
-    console.log(`Wrote results to ${resolve(opts.json)}`);
-  }
-}
-
-// ==========================================
-// Phase 4 Command Implementations
-// ==========================================
-
-/**
- * Reconcile hierarchical forecasts
- */
-async function cmdReconcile(opts) {
-  if (!opts.project) throw new Error('--project required for reconcile');
-  
-  const project = JSON.parse(readFileSync(resolve(opts.project), 'utf8'));
-  
-  // Load hierarchy configuration
-  const hierarchyConfig = opts.hierarchy 
-    ? JSON.parse(readFileSync(resolve(opts.hierarchy), 'utf8'))
-    : defaultHierarchy(project);
-  
-  const reconciler = new HierarchicalReconciler(hierarchyConfig);
-  
-  // Load forecasts and actual data
-  const seriesData = await loadSeriesData(project);
-  const bottomForecasts = await reconciler.forecastBottom(seriesData, { method: project.method || 'holt', horizon: project.horizon || 10 });
-  
-  const reconciled = reconciler.reconcile(bottomForecasts);
-  
-  // Write output
-  writeFileSync(
-    resolve(opts.out || 'reconciled-forecasts.json'),
-    JSON.stringify({ reconciled, methodology: 'optimal_combination' }, null, 2)
-  );
-  console.log('Reconciliation complete. Results written to reconciled-forecasts.json');
-}
-
-function defaultHierarchy(project) {
-  // Auto-detect simple hierarchy from project metadata
-  return {
-    levels: ['region', 'product'],
-    series: {},
-    constraints: []
-  };
-}
-
-async function loadSeriesData(project) {
-  // Placeholder - would load from project configuration
-  return {};
-}
-
-/**
- * Panel data analysis
- */
-async function cmdPanel(opts) {
-  if (!opts['series-dir']) throw new Error('--series-dir required for panel analysis');
-  
-  const seriesDir = resolve(opts['series-dir']);
-  const methods = opts.methods ? opts.methods.split(',') : ['holt', 'snaive'];
-  const groupBy = opts['group-by'] || 'category';
-  
-  // Load all series from directory
-  const seriesGroup = [];
-  // Implementation would scan directory and parse CSVs
-  
-  const analyzer = new PanelAnalyzer(seriesGroup);
-  const results = await analyzer.compareMethods(methods, ['RMSE', 'MAE']);
-  
-  writeFileSync(
-    resolve(opts.out || 'panel-analysis.json'),
-    JSON.stringify(results, null, 2)
-  );
-  console.log('Panel analysis complete.');
-}
-
-/**
- * Spillover detection using VAR models
- */
-async function cmdSpillover(opts) {
-  if (!opts.series) throw new Error('--series required (comma-separated CSV files)');
-  
-  const seriesFiles = opts.series.split(',').map(f => resolve(f.trim()));
-  
-  // Load series
-  const timeSeriesMatrix = await Promise.all(seriesFiles.map(async f => {
-    const csv = readFileSync(f, 'utf8');
-    const data = parseCsv(csv);
-    return data.values;
-  }));
-  
-  const varModel = new VARModel(1);
-  const result = await varModel.fit(timeSeriesMatrix);
-  
-  writeFileSync(
-    resolve(opts.out || 'spillover-results.json'),
-    JSON.stringify(result, null, 2)
-  );
-  console.log('Spillover analysis complete.');
-}
-
-/**
- * Factor extraction
- */
-async function cmdFactors(opts) {
-  if (!opts.data) throw new Error('--data required');
-  
-  const matrix = await loadFactorMatrix(opts.data);
-  
-  const extractor = new FactorExtractor();
-  const k = parseInt(opts.factors) || 5;
-  const result = extractor.extractFactors(matrix, k);
-  
-  writeFileSync(
-    resolve(opts.out || 'factors.json'),
-    JSON.stringify(result, null, 2)
-  );
-  console.log(`Extracted ${k} factors.`);
-}
-
-async function loadFactorMatrix(dataPath) {
-  // Placeholder - would load multi-series matrix
-  return [];
-}
-
-/**
- * Advanced uncertainty quantification
- */
-async function cmdUncertainty(opts) {
-  if (!opts.project) throw new Error('--project required');
-  
-  const project = JSON.parse(readFileSync(resolve(opts.project), 'utf8'));
-  const mcSimulator = new MonteCarloSimulator({ nSims: 10000 });
-  
-  if (opts.type === 'cumulative') {
-    const horizon = parseInt(opts.period) || 30;
-    const paths = await mcSimulator.simulatePaths({}, horizon);
-    const interval = mcSimulator.computeCumulativeInterval(paths, horizon);
-    
-    console.log(JSON.stringify(interval, null, 2));
-  } else if (opts.type === 'joint') {
-    const horizon = opts.horizon ? parseInt(opts.horizon) : 24;
-    const paths = await mcSimulator.simulatePaths({}, horizon);
-    const bands = mcSimulator.computeJointBands(paths, 0.95, 'simulation');
-    
-    console.log(JSON.stringify(bands, null, 2));
-  }
-}
-
-/**
- * Counterfactual "what-if" scenarios
- */
-async function cmdWhatIf(opts) {
-  if (!opts.project) throw new Error('--project required');
-  
-  const model = await loadFittedModel(opts.project);
-  const engine = new CounterfactualEngine(model);
-  
-  const intervention = parseIntervention(opts);
-  const result = engine.simulateCounterfactual(intervention);
-  
-  writeFileSync(
-    resolve(opts.out || 'counterfactual-result.json'),
-    JSON.stringify(result, null, 2)
-  );
-  console.log(result.interpretation);
-}
-
-function parseIntervention(opts) {
-  // Parse intervention from command line
-  return {
-    variable: opts.variable || 'trend',
-    newValues: opts.constantValue !== undefined ? [parseFloat(opts.constantValue)] : undefined,
-    type: opts.type || 'constant_value',
-    factor: opts.factor ? parseFloat(opts.factor) : 1
-  };
-}
-
-async function loadFittedModel(projectFile) {
-  // Placeholder - would load fitted model
-  return {
-    lastValue: 100,
-    trend: 1,
-    horizon: 30,
-    getCoefficients: () => ({})
-  };
-}
-
-/**
- * Schedule automatic updates
- */
-async function cmdSchedule(opts) {
-  const scheduler = new UpdateScheduler();
-  
-  const job = scheduler.registerJob({
-    modelId: opts.modelId || 'default',
-    schedule: opts.schedule || 'daily',
-    action: 'refit',
-    options: {}
-  });
-  
-  writeFileSync(
-    resolve(opts.out || 'scheduler-config.json'),
-    JSON.stringify({ jobId: job, scheduler }, null, 2)
-  );
-  console.log(`Scheduled update registered with ID: ${job}`);
-}
-
-/**
- * Trigger model updates
- */
-async function cmdUpdate(opts) {
-  const scheduler = new UpdateScheduler();
-  const eventTrigger = new EventTriggerSystem();
-  
-  // Execute scheduled jobs
-  const execution = await scheduler.executeJobs();
-  
-  console.log(`Executed ${execution.executed.length} jobs at ${execution.timestamp}`);
-}
-
-/**
- * Plugin system commands (Phase 5)
- */
-async function cmdPlugins(opts) {
-  if (opts.list || opts._ === 'list') {
-    console.log('📦 ForecastLab Plugins\n');
-    
-    const stats = pluginRegistry.getStats();
-    console.log(`Registered: ${stats.models} models, ${stats.metrics} metrics, ${stats.commands} commands`);
-    console.log('');
-    
-    const models = pluginRegistry.listModelsMetadata();
-    if (models.length > 0) {
-      console.log('Available Models:');
-      console.log('─────────────');
-      for (const model of models) {
-        console.log(`  • ${model.id}`);
-        if (model.description) console.log(`    ${model.description}`);
-      }
-    } else {
-      console.log('No custom plugins loaded.');
-      console.log('Use: forecastlab install-plugin <plugin-name>');
-    }
-  } else if (opts.install || opts._ === 'install') {
-    console.log('Plugin installation coming soon...');
-  }
-}
-
-async function cmdInstallPlugin(opts) {
-  if (!opts.plugin && !opts.name) {
-    throw new Error('Usage: forecastlab install-plugin <name> [--from-url]');
-  }
-  
-  const pluginName = opts.plugin || opts.name;
-  console.log(`📥 Installing plugin: ${pluginName}`);
-  console.log('Installation API under development...');
-}
-
 export async function main(argv = process.argv.slice(2)) {
   const { command, opts, action } = parseArgs(argv);
   if (opts.version) {
@@ -1351,7 +548,7 @@ export async function main(argv = process.argv.slice(2)) {
     case 'methods': cmdMethods(); break;
     case 'demo': cmdDemo(opts); break;
     case 'serve': cmdServe(opts); break;
-    
+
     // Phase 4: Advanced Analytics Commands
     case 'reconcile': await cmdReconcile(opts); break;
     case 'panel': await cmdPanel(opts); break;
@@ -1361,7 +558,7 @@ export async function main(argv = process.argv.slice(2)) {
     case 'what-if': await cmdWhatIf(opts); break;
     case 'schedule': await cmdSchedule(opts); break;
     case 'update': await cmdUpdate(opts); break;
-    
+
     // Phase 5: Plugin System Commands
     case 'plugins': await cmdPlugins(opts); break;
     case 'install-plugin': await cmdInstallPlugin(opts); break;

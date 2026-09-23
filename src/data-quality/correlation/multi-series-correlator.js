@@ -45,7 +45,7 @@ export class MultiSeriesCorrelator {
     }
 
     // Identify hierarchical clusters
-    const clusters = this.groupRelatedSeries(significantRelations);
+    const clusters = this.groupRelatedRelations(significantRelations);
 
     return {
       seriesCount: seriesData.length,
@@ -68,13 +68,15 @@ export class MultiSeriesCorrelator {
 
     for (const { name, data } of seriesData) {
       const values = data.map(d => d.value).filter(v => v !== null && v !== undefined);
-      
+
+      const mean = values.reduce((s, v) => s + v, 0) / values.length;
+
       const stats = {
         name,
         count: values.length,
-        mean: values.reduce((s, v) => s + v, 0) / values.length,
+        mean,
         std: this.std(values),
-        variance: values.reduce((s, v) => s + (v - stats.mean) ** 2, 0) / values.length
+        variance: values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length
       };
 
       this.seriesCache.set(name, { data, stats });
@@ -100,7 +102,11 @@ export class MultiSeriesCorrelator {
       
       for (let j = i + 1; j < seriesList.length; j++) {
         const seriesB = seriesList[j];
-        
+
+        if (!matrix[seriesB.name]) {
+          matrix[seriesB.name] = {};
+        }
+
         // Zero-lag correlation
         const zeroLag = this.computeCorrelationAtLag(seriesA, seriesB, 0);
         matrix[seriesA.name][seriesB.name] = zeroLag.r;

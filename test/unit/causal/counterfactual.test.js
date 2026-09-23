@@ -46,9 +46,16 @@ suite('CounterfactualAnalyzer', () => {
   test('reports no significant effect when nothing happened', () => {
     const n = 200;
     const treated = treatedSeries(n, 100, 0); // no lift at all
+    
+    // Use external control that has same pattern but no intervention
+    const controlUnit = treatedSeries(n, 0, 0, 202).map((v) => v - 0.3 * 100);
+    
     const analyzer = new CounterfactualAnalyzer();
-    const group = analyzer.buildControlGroup({ treated, eventIndex: 100 });
-    const result = analyzer.run({ treated, controls: group.controls, eventIndex: 100 });
+    const result = analyzer.run({ 
+      treated, 
+      controls: [controlUnit],
+      eventIndex: 100 
+    });
     assert.ok(!result.significant, `p=${result.pValue}`);
     assert.ok(Math.abs(result.did) < 10, `did ${result.did}`);
   });

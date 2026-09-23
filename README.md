@@ -2,7 +2,7 @@
 
 **Classical forecasting without the black-box magic ✨**
 
-![Version](https://img.shields.io/badge/version-4.0.0--beta-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-7.2.0-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -266,4 +266,4 @@ forecastlab demo --example energy
 ---
 
 *Made with ❤️ for transparent, trustworthy forecasting.*  
-*v4.0.0-beta — Plugin ecosystem now live!* 🚀
+*v7.2.0 — Causal understanding now live!* 🚀

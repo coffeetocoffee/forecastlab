@@ -569,7 +569,7 @@ export class DataQualityEngine {
   }
 
   calculateHealthScore(issues) {
-    const weights = { critical: 3, warning: 1, info: 0.5 };
+    const weights = { critical: 3, error: 3, warning: 1, info: 0.5 };
     const score = issues.reduce((acc, i) => acc + weights[i.severity], 0);
     const maxScore = issues.length * 3;
     return maxScore > 0 ? ((maxScore - score) / maxScore * 100).toFixed(1) : 100;

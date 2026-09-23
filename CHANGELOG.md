@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [7.3.0] - 2026-09-23
+
+### Refactored
+- **Command separation**: pulled CLI commands into modular files under `src/commands/`:
+  - `advanced.js`: reconcile, panel, spillover, factors, uncertainty, what-if, schedule, update
+  - `streaming.js`: serve, stream, replay
+  - `reports.js`: reproduce, diff, batch
+  - `plugins.js`: plugins, install-plugin
+- **Shared helpers**: extracted common functions (`writeJson`, `toPort`) to `cli-shared.js`
+- **Internal structure**: no behavior changes; improved maintainability
+
+## [7.2.0] - 2026-09-22
+
+### Added
+- **Causal understanding without machine learning** - `src/causal.js` and the
+  `causal` CLI command family (`graph`, `what-if`, `factors`, `counterfactual`)
+  - Relationship builder: lagged links between variables with lag profiles,
+    per-unit effects, Granger-style F-test p-values, and confidence scores;
+    interactive drag-and-drop HTML graph
+  - Intervention simulator with impulse-response propagation, uncertainty
+    bands, extrapolation warnings, and natural experiments
+  - External factor integration with temporal decay kernels (box, exponential,
+    triangular, gaussian, step) and impact ranking
+  - Counterfactual engine: control groups of similar periods with
+    difference-in-differences and t-tests
+
+## [7.1.0]
+
+> Note: releases 5.x and 6.x were skipped; versioning jumped from 4.x to 7.x.
+> Entries below 7.0.0 reflect the releases that were logged at the time.
+
 ## [7.0.0] - 2026-09-21
 
 ### Added
